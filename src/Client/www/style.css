@@ -42,9 +42,10 @@ body {
 }
 
 .round-settings {
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
+    overflow: auto;
 }
 
 .round-settings .ranges-buttons {
@@ -194,6 +195,7 @@ input:is(:focus, :focus-visible, :focus-within) {
 
 .ranges-container {
     flex: 1;
+    overflow: auto;
 }
 
 .feedback-container {
