@@ -110,6 +110,21 @@ function onMessage(webSocket) {
 }
 
 /**
+ * @param {string} id
+ * @returns {number?}
+ **/
+function get_field_value(id) {
+    const elem = /** @type {HTMLButtonElement?} */ (document.getElementById(id));
+    const value = parseInt(elem?.value ?? "");
+    if (isNaN(value) || value <= 0) {
+        elem?.classList.add('error');
+        return null;
+    }
+    elem?.classList.remove('error');
+    return value
+}
+
+/**
  * @param {WebSocket} webSocket
  * @returns {EventListener}
  */
@@ -126,18 +141,21 @@ function sendRound(webSocket) {
 
         hide_range_errors();
 
-        const rateElem = /** @type {HTMLButtonElement?} */ (document.getElementById('rate'));
-        const refreshInMilliseconds = parseInt(rateElem?.value ?? "");
-        if (isNaN(refreshInMilliseconds) || refreshInMilliseconds <= 0) {
-            rateElem?.classList.add('error');
-            return;
-        }
-        rateElem?.classList.remove('error');
+        const refreshInMilliseconds = get_field_value("rate");
+        if (refreshInMilliseconds == null) return;
+        const kp = get_field_value("kp");
+        if (kp == null) return;
+        const ki = get_field_value("ki");
+        if (ki == null) return;
+        const kd = get_field_value("kd");
+        if (kd == null) return;
 
-        webSocket.send(JSON.stringify({
+        const message = JSON.stringify({
             type: "Command",
-            data: { refreshInMilliseconds, pass: PASS, ranges, isTest: false }
-        }));
+            data: { refreshInMilliseconds, pass: PASS, ranges, isTest: false, kp, ki, kd }
+        });
+        console.log(message)
+        webSocket.send(message);
 
         refresh_rate = refreshInMilliseconds / 1000;
         const sendBtn = /** @type {HTMLButtonElement} */ (document.getElementById("send-round"));

@@ -15,6 +15,9 @@ namespace TemperatureWarriorCode.Web
         public TemperatureRange[] temperatureRanges;
         public int refreshInMilliseconds;
         public bool isTest;
+        public double kp;
+        public double ki;
+        public double kd;
     }
     // csharpier-ignore-start
     /// Etructura de datos recibida del cliente web
@@ -33,7 +36,6 @@ namespace TemperatureWarriorCode.Web
         // NOTA: `data` e `isTest` solo disponibles cuando type ==
         // MessageType.SendCommand (tipo suma de pobre, parte 1)
         public CommandRequest? data { get; set; }
-        public bool? isTest;
 
         // (tipo suma de pobre, parte 2)
         [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -74,6 +76,9 @@ namespace TemperatureWarriorCode.Web
             public int refreshInMilliseconds { get; set; }
             public string pass { get; set; }
             public bool isTest { get; set; }
+            public double kp { get; set; }
+            public double ki { get; set; }
+            public double kd { get; set; }
 
             // En .net8.0 podríamos usar `required` para verificar esto, pero
             // Esta placa parece usar .netstandard2.1 así que tenemos que crear
@@ -97,6 +102,9 @@ namespace TemperatureWarriorCode.Web
                     temperatureRanges = ranges.Select(x => x.ToTemperatureRange()).ToArray(),
                     refreshInMilliseconds = refreshInMilliseconds,
                     isTest = isTest,
+                    kp = kp,
+                    ki = ki,
+                    kd = kd,
                 };
             }
         };

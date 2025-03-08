@@ -228,7 +228,9 @@ namespace TemperatureWarriorCode
                     }
 
                     Resolver.Log.Info("[MeadowApp] Comando guardado");
-                    currentCommand = message.data.Value.ToCommand();
+                    Command cmd = message.data.Value.ToCommand();
+                    temperatureController.set_constants(cmd.kp, cmd.ki, cmd.kd);
+                    currentCommand = cmd;
                     currentMode = OpMode.Prep;
                     await webServer.SendMessage(connection, "{\"type\": \"ConfigOK\"}");
                     break;
