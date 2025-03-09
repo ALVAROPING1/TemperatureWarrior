@@ -13,6 +13,10 @@ let global_ranges;
 let total_time = 0;
 let round_is_test = false;
 
+const testBtn = /** @type {HTMLButtonElement}*/ (document.getElementById("test-sensor"));
+const sendBtn = /** @type {HTMLButtonElement}*/ (document.getElementById("send-round"));
+const startBtn = /** @type {HTMLButtonElement}*/ (document.getElementById("start-round"));
+
 /**
  * @param {WebSocket} webSocket
  * @returns {function(MessageEvent): any} message
@@ -44,7 +48,7 @@ function onMessage(webSocket) {
                 round_updates_counter = 0;
 
                 if (round_is_test) {
-                    document.getElementById("test-sensor").textContent = 'Test Sensor';
+                    testBtn.textContent = 'Test Sensor';
                     round_is_test = false;
                     change_round_status('unset');
                 }
@@ -57,7 +61,7 @@ function onMessage(webSocket) {
                 round_updates_counter = 0;
 
                 if (round_is_test) {
-                    document.getElementById("test-sensor").textContent = 'Test Sensor';
+                    testBtn.textContent = 'Test Sensor';
                     round_is_test = false;
                     change_round_status('unset');
                 }
@@ -73,7 +77,7 @@ function onMessage(webSocket) {
 
                 stop_round();
                 if (round_is_test) {
-                    document.getElementById("test-sensor").textContent = 'Test Sensor';
+                    testBtn.textContent = 'Test Sensor';
                     round_is_test = false; // para la próxima ronda
                     change_round_status('unset');
                 } else {
@@ -86,7 +90,7 @@ function onMessage(webSocket) {
 
             case 'Bad Format':
                 console.log('mal formato');
-                document.getElementById("send-round").disabled = true;
+                sendBtn.disabled = true;
                 break;
 
             case 'ConfigOK':
@@ -97,7 +101,7 @@ function onMessage(webSocket) {
                 } else {
                     set_round_chart(global_ranges);
                     ranges_changed = false;
-                    document.getElementById("start-round").disabled = false;
+                    startBtn.disabled = false;
                     change_round_status('ready');
                 }
                 current_time = 0;
@@ -158,7 +162,6 @@ function sendRound(webSocket) {
         webSocket.send(message);
 
         refresh_rate = refreshInMilliseconds / 1000;
-        const sendBtn = /** @type {HTMLButtonElement} */ (document.getElementById("send-round"));
         sendBtn.disabled = true;
         sendBtn.textContent = 'Cambiar Ronda';
         total_time = ranges.reduce((acc, range) => acc + range.roundTime, 0);
@@ -177,10 +180,9 @@ function startRound(webSocket) {
 
         webSocket.send(JSON.stringify({ type: "Start" }));
         round_started = true;
-        const sendBtn = document.getElementById("send-round");
         sendBtn.disabled = true;
         sendBtn.textContent = 'Enviar Ronda';
-        document.getElementById("start-round").disabled = true;
+        startBtn.disabled = true;
     };
 }
 
@@ -197,8 +199,8 @@ function handleTest(webSocket) {
 
         if (!round_is_test) {
             round_is_test = true;
-            document.getElementById("send-round").disabled = true;
-            document.getElementById("test-sensor").textContent = 'Stop Test';
+            sendBtn.disabled = true;
+            testBtn.textContent = 'Stop Test';
 
             webSocket.send(JSON.stringify({
                 type: "Command",
@@ -213,7 +215,7 @@ function handleTest(webSocket) {
             refresh_rate = 1;
         } else {
             webSocket.send(JSON.stringify({ type: "Shutdown" }));
-            document.getElementById("test-sensor").textContent = 'Test Sensor';
+            testBtn.textContent = 'Test Sensor';
         }
     };
 }
@@ -257,9 +259,6 @@ function onClose(_) {
         console.log("===== CONNECTION CLOSED =====");
         show_connect_error(e.reason || "Conexión cerrada");
 
-        const sendBtn = document.getElementById("send-round");
-        const startBtn = document.getElementById("start-round");
-
         sendBtn.disabled = true;
         startBtn.disabled = true;
 
@@ -297,15 +296,12 @@ function main() {
             webSocket.addEventListener("error", onError(webSocket));
             webSocket.addEventListener("message", onMessage(webSocket));
 
-            const sendBtn = document.getElementById("send-round");
-            const startBtn = document.getElementById("start-round");
-            const shutdownBtn = document.getElementById("shutdown");
-            const testBtn = document.getElementById("test-sensor");
+            const shutdownBtn = /** @type {HTMLButtonElement}*/ (document.getElementById("shutdown"));
 
-            sendBtn?.addEventListener("click", sendRound(webSocket));
-            startBtn?.addEventListener("click", startRound(webSocket));
-            shutdownBtn?.addEventListener("click", sendShutdown(webSocket));
-            testBtn?.addEventListener("click", handleTest(webSocket));
+            sendBtn.addEventListener("click", sendRound(webSocket));
+            startBtn.addEventListener("click", startRound(webSocket));
+            shutdownBtn.addEventListener("click", sendShutdown(webSocket));
+            testBtn.addEventListener("click", handleTest(webSocket));
 
             sendBtn.disabled = false;
             shutdownBtn.disabled = false;
