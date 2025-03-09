@@ -1,10 +1,16 @@
 // @ts-check
 
+import express from "express";
+
 import http from 'http';
-import fs from 'fs/promises'; // fs con interfaz de Promise (y async/await)
 import path from 'path';
 import url from 'url';
+import util from 'util';
+import WebSocket, { WebSocketServer } from 'ws';
 
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
 
 // Necesario para simular __filename y __dirname en un proyecto de
 // nodejs que usa módulos ES6
@@ -16,114 +22,51 @@ const __dirname = path.dirname(__filename);
 /** @type {number} */
 const PORT = 8080;
 
-/** @typedef {"text/html" | "text/javascript" | "text/css" | "application/json"} ContentType
-/** @typedef {Buffer | string} Content */
-/** @typedef {"GET" | "POST" | "PATCH" | "PUT" | "DELETE"} HttpMethod */
-/** @typedef {200|400|404|405|409|500} StatusCode */
-/**
- * @typedef {Object} ResponseData
- * @property {StatusCode} status
- * @property {Content} content
- * @property {ContentType} contentType
- */
-
-/**
- * @param {string} filename - Path relativo al directorio de este archivo
- * @returns {Promise<Content>}
- */
-async function resolveFile(filename) {
-	return await fs.readFile(path.resolve(__dirname, filename));
+/** @type {function(Object): void} */
+const log = obj => {
+    console.log(util.inspect(obj, { showHidden: false, depth: null, colors: true }));
 }
 
-/**
- * @param {StatusCode} status
- * @param {Content} content
- * @param {ContentType} contentType
- * @returns {ResponseData}
- */
-const makeResponseData = (status, content, contentType) => ({ status, content, contentType });
-
-/**
- * @param {http.ServerResponse} res
- * @param {ResponseData} data
- */
-function sendResponse(res, data) {
-	res.writeHead(data.status, { "Content-Type": data.contentType });
-	res.end(data.content);
+/** @type {function(WebSocket): function(Object): void}*/
+const sender = ws => obj => {
+    ws.send(JSON.stringify(obj))
 }
 
-/**
- * @param {http.IncomingMessage} req
- * @returns {Promise<Buffer>}
- */
-function getRequestBody(req) {
-	/** @type {Buffer[]} */
-	let chunks = [];
-	return new Promise((resolve, reject) => {
-		req.on('data', chunk => chunks.push(chunk));
-		req.on('end', () => resolve(Buffer.concat(chunks)));
-		req.on('error', err => reject(err));
-	});
-}
+// Express middleware
+app.use("/", express.static(path.join(__dirname, "www")))
 
-/**
- * @param {string} filename
- * @returns {ContentType}
- */
-function filenameToContentType(filename) {
-	switch (path.extname(filename)) {
-		case ".js":
-			return "text/javascript";
-		case ".html":
-			return "text/html";
-		case ".css":
-			return "text/css";
-		case ".json":
-			return "application/json";
-		default:
-			throw new Error("Extensión inválida");
-	}
-}
+// WebSocket
 
-/** @type {ResponseData} */
-const INVALID_ROUTE_RESPONSE = makeResponseData(400, "Ruta invalida\r\n", "text/html");
+wss.on('connection', ws => {
+    ws.on('error', console.error);
+    const send = sender(ws);
 
-/**
- * @param {http.IncomingMessage} req
- * @returns {Promise<ResponseData>}
- */
-async function resolveRequest(req) {
-	if (req.url === undefined)
-		return INVALID_ROUTE_RESPONSE;
+    ws.on('message', async msg => {
+        const message = JSON.parse(msg.toString());
+        log(message);
+        switch (message.type) {
+            case "Command":
+                send({ type: "ConfigOK" });
+                break;
+            case "ShutdownCommand":
+                send({ type: "ShutdownCommand", message: "Shutdown Command Received" });
+                break;
+            case "Start":
+                for (let i = 0; i < 5; i++) {
+                    send({ type: "N", ns: [10, 13] });
+                    await new Promise((resolve) => {
+                        setTimeout(resolve, 2000);
+                    });
+                }
+                send({ type: "RoundFinished", timeInRange: 1000, ns: [15] });
+                break;
+            default:
+                break;
+        } {
+        }
+    });
+});
 
-	switch (req.method) {
-		case "GET":
-			switch (req.url) {
-				case "/":
-					return makeResponseData(200, await resolveFile("www/index.html"), "text/html");
-				default:
-					try {
-						return makeResponseData(200, await resolveFile(`www/${req.url}`), filenameToContentType(req.url));
-					} catch (_) {
-						return INVALID_ROUTE_RESPONSE;
-					}
-			}
-		case "POST":
-		case "DELETE":
-		case "PATCH":
-			return INVALID_ROUTE_RESPONSE;
-		default:
-			return makeResponseData(405, `Método: "${req.method}" no permitido!\r\n`, "text/html");
-	}
-}
-
-/**
- * @param {http.IncomingMessage} req
- * @param {http.ServerResponse} res
- */
-async function routeRequest(req, res) {
-	sendResponse(res, await resolveRequest(req));
-}
-
-http.createServer(routeRequest).listen(PORT);
-console.log(`Server running at: 127.0.0.1:${PORT}`);
+server.listen(PORT, () => {
+    console.log(`Server running at: 127.0.0.1:${PORT}`);
+})

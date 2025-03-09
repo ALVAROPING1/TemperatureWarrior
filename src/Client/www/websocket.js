@@ -23,7 +23,8 @@ const startBtn = /** @type {HTMLButtonElement}*/ (document.getElementById("start
  */
 function onMessage(webSocket) {
     return async e => {
-        const json = await e.data.text();
+        const json = await e.data.text?.() ?? e.data;
+        console.log(json);
         const message = JSON.parse(json);
         console.log(message.type);
 
@@ -154,12 +155,12 @@ function sendRound(webSocket) {
         const kd = get_field_value("kd");
         if (kd == null) return;
 
-        const message = JSON.stringify({
+        const message = {
             type: "Command",
             data: { refreshInMilliseconds, pass: PASS, ranges, isTest: false, kp, ki, kd }
-        });
+        };
         console.log(message)
-        webSocket.send(message);
+        webSocket.send(JSON.stringify(message));
 
         refresh_rate = refreshInMilliseconds / 1000;
         sendBtn.disabled = true;

@@ -276,7 +276,7 @@ namespace TemperatureWarriorCode
                 new JsonSerializerOptions
                 {
                     Converters = { new RingBufferJsonConverter() },
-                    WriteIndented = true,
+                    WriteIndented = false,
                 }
             );
         }
