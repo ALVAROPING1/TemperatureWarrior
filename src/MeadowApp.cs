@@ -399,6 +399,9 @@ namespace TemperatureWarriorCode
             if (total_time / cmd.refreshInMilliseconds == 0)
                 RegisterTimeControllerTemperature(timeController);
 
+            // Send remaining data
+            await NotifyClient(webServer, connection);
+
             if (!cmd.isTest)
             { // Apagar actuador en caso de no ser un test de
                 // sensor de temperatura
