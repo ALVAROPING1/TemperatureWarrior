@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Meadow;
 
 namespace RingBuffer
 {
@@ -12,11 +13,6 @@ namespace RingBuffer
         // Lista en lugar de cola para permitir resizing entre distintos usos
         // (rondas)
         private List<T> buffer;
-
-        public int Capacity
-        {
-            get { return buffer.Capacity; }
-        }
 
         public RingBuffer()
             : this(0) { }
@@ -33,7 +29,7 @@ namespace RingBuffer
             if (tail == head)
                 return false;
             result = buffer[head];
-            head = (head + 1) % Capacity;
+            head = (head + 1) % buffer.Capacity;
             return true;
         }
 
@@ -42,7 +38,7 @@ namespace RingBuffer
             if (tail + 1 == head)
                 return false;
             buffer[tail] = item;
-            tail = (tail + 1) % Capacity;
+            tail = (tail + 1) % buffer.Capacity;
             return true;
         }
 
@@ -53,11 +49,11 @@ namespace RingBuffer
 
         public void ResizeAndReset(int newCapacity)
         {
-            // el buffer tiene como mínimo una capacidad de Count
-            var capacityDelta = newCapacity - buffer.Count;
-            if (capacityDelta > 0) // Forzar crecimiento
-                for (int i = 0; i < capacityDelta; ++i)
-                    buffer.Add(default!);
+            if (newCapacity <= buffer.Capacity)
+                return;
+            buffer.Capacity = newCapacity;
+            for (int i = buffer.Count; i < buffer.Capacity; ++i)
+                buffer.Add(default!);
             head = 0;
             tail = 0;
         }
