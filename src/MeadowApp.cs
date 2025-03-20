@@ -22,9 +22,11 @@ namespace TemperatureWarriorCode
     {
         /// Sensor de temperatura
         AnalogTemperature sensor;
+        LowPassFilter sensor_filter;
         TimeSpan sensorSampleTime = TimeSpan.FromSeconds(0.1);
 
-        Temperature currentTemperature;
+        double currentTemperature;
+        double temp_raw;
 
         TemperatureController temperatureController;
         bool temperatureHandlerRunning = false; // Evitar overlapping de handlers
@@ -94,11 +96,10 @@ namespace TemperatureWarriorCode
         /// Configures the sensors
         private void SensorSetup()
         {
-            // TODO Inicializar sensores de actuadores
+            // TODO: Inicializar sensores de actuadores
 
-            temperatureController = new TemperatureController(
-                sampleTimeInMilliseconds: sensorSampleTime.Milliseconds
-            );
+            temperatureController = new TemperatureController(dt: sensorSampleTime.Milliseconds);
+            sensor_filter = new LowPassFilter(((double)sensorSampleTime.Milliseconds) / 1000, 0.15);
 
             // Configuración de Sensor de Temperatura
             sensor = new AnalogTemperature(
@@ -182,21 +183,23 @@ namespace TemperatureWarriorCode
         /// Method to handle updates on the temperature
         private void TemperatureUpdateHandler(object sender, IChangeResult<Temperature> e)
         {
-            currentTemperature = e.New;
-            // Resolver.Log.Info($"[MeadowApp] DEBUG (Remove this console line):
-            // Current temperature={currentTemperature}");
+            double temp = e.New.Celsius;
+            temp_raw = temp;
+            temp = sensor_filter.filter(temp);
+            currentTemperature = temp;
+            // Resolver.Log.Info($"[MeadowApp] DEBUG: Current
+            // temperature={currentTemperature}");
 
             if (temperatureHandlerRunning)
                 return;
             temperatureHandlerRunning = true;
 
-            double temp = currentTemperature.Celsius;
             if (temp >= 55.0)
             {
                 TemperatureTooHighHandler();
                 return;
             }
-            double output = temperatureController.update(currentTemperature.Celsius);
+            temperatureController.update(temp);
 
             temperatureHandlerRunning = false;
         }
@@ -291,7 +294,7 @@ namespace TemperatureWarriorCode
 
         private void RegisterTimeControllerTemperature(TimeController timeController)
         {
-            var currTemp = currentTemperature.Celsius;
+            var currTemp = currentTemperature;
             timeController.RegisterTemperature(currTemp);
             if (!nextNotificationsBuffer.Enqueue(currTemp))
                 Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de notifiaciones");
