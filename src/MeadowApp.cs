@@ -58,7 +58,8 @@ namespace TemperatureWarriorCode
 
         /// Buffer de actualizaciones a enviar en la próxima notifiación al cliente
         RingBuffer<double> nextNotificationsBuffer = new();
-        readonly long notificationPeriodInMilliseconds = 2000;
+        RingBuffer<double> orig_temp = new();
+        readonly long notificationPeriodInMilliseconds = 1000;
 
         /// El modo de ejecución del sistema
         enum OpMode
@@ -191,7 +192,10 @@ namespace TemperatureWarriorCode
             // temperature={currentTemperature}");
 
             if (temperatureHandlerRunning)
+            {
+                Resolver.Log.Info($"[MeadowApp] DEBUG: temperature handler already running");
                 return;
+            }
             temperatureHandlerRunning = true;
 
             if (temp >= 55.0)
@@ -272,10 +276,10 @@ namespace TemperatureWarriorCode
             }
         }
 
-        private string SerializeNextNotifications()
+        private string SerializeNextNotifications(RingBuffer<double> buffer)
         {
             return JsonSerializer.Serialize(
-                nextNotificationsBuffer,
+                buffer,
                 new JsonSerializerOptions
                 {
                     Converters = { new RingBufferJsonConverter() },
@@ -288,7 +292,7 @@ namespace TemperatureWarriorCode
         {
             return webServer.SendMessage(
                 connection,
-                $"{{ \"type\": \"N\", \"ns\": {SerializeNextNotifications()}}}"
+                $"{{ \"type\": \"N\", \"ns\": {SerializeNextNotifications(nextNotificationsBuffer)}, \"temp\": {SerializeNextNotifications(orig_temp)}}}"
             );
         }
 
@@ -297,6 +301,8 @@ namespace TemperatureWarriorCode
             var currTemp = currentTemperature;
             timeController.RegisterTemperature(currTemp);
             if (!nextNotificationsBuffer.Enqueue(currTemp))
+                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de notifiaciones");
+            if (!orig_temp.Enqueue(temp_raw))
                 Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de notifiaciones");
         }
 
@@ -356,6 +362,9 @@ namespace TemperatureWarriorCode
             var newSize = 2 * notifications;
 
             nextNotificationsBuffer.ResizeAndReset(newSize);
+            orig_temp.ResizeAndReset(newSize);
+
+            GC.Collect();
 
             //// Lanzar conteo en librería de control cada refreshInMilliseconds
             void registerTimeController(object _) =>
@@ -462,7 +471,7 @@ namespace TemperatureWarriorCode
                 // buffer
                 await webServer.SendMessage(
                     connection,
-                    $"{{ \"type\": \"RoundFinished\", \"timeInRange\": {timeController.TimeInRangeInMilliseconds}, \"ns\": {SerializeNextNotifications()}}}"
+                    $"{{ \"type\": \"RoundFinished\", \"timeInRange\": {timeController.TimeInRangeInMilliseconds}, \"ns\": {SerializeNextNotifications(nextNotificationsBuffer)}, \"temp\": {SerializeNextNotifications(orig_temp)}}}"
                 );
             }
 

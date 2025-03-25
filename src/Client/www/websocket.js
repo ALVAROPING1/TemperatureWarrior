@@ -28,6 +28,7 @@ function onMessage(webSocket) {
         const message = JSON.parse(json);
         console.log(message.type);
 
+        let t
         switch (message.type) {
             case 'N':
                 console.log("received N");
@@ -35,11 +36,16 @@ function onMessage(webSocket) {
                 if (round_updates_counter == 0)
                     change_round_status('running');
                 round_updates_counter += 1;
-                const array = message.ns
-                for (const temp of array) {
+                t = current_time;
+                for (const temp of message.ns) {
                     if (!isNaN(temp))
                         add_chart_point(current_time, temp);
-                    current_time += refresh_rate
+                    current_time += refresh_rate;
+                }
+                for (const temp of message.temp) {
+                    if (!isNaN(temp))
+                        add_chart_point(t, temp, 1);
+                    t += refresh_rate;
                 }
                 break;
 
@@ -70,10 +76,16 @@ function onMessage(webSocket) {
                 break;
 
             case 'RoundFinished':
+                t = current_time;
                 for (const temp of message.ns) {
                     if (!isNaN(temp))
                         add_chart_point(current_time, temp);
                     current_time += refresh_rate
+                }
+                for (const temp of message.temp) {
+                    if (!isNaN(temp))
+                        add_chart_point(t, temp);
+                    t += refresh_rate
                 }
 
                 stop_round();

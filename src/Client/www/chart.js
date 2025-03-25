@@ -25,6 +25,21 @@ const init_graph = () => {
                         }
                     },
                 },
+                {
+                    label: 'Temperatura Raw (°C)',
+                    data: [],
+                    borderWidth: 1,
+                    pointBorderColor: [],
+                    pointBackgroundColor: [],
+                    segment: {
+                        borderColor: seg => {
+                            if (round_is_test) return '#5DADE2';
+                            const p0 = is_on_range(seg.p0.parsed.y, seg.p0.parsed.x);
+                            const p1 = is_on_range(seg.p1.parsed.y, seg.p1.parsed.x);
+                            return p0 && p1 ? '#00FF88' : '#FF0000';
+                        }
+                    },
+                },
             ],
         },
         options: {
@@ -82,8 +97,8 @@ const set_test_chart = () => {
     chart.update();
 };
 
-const add_chart_point = (x, y) => {
-    chart.data.datasets[0].data.push({ x, y });
+const add_chart_point = (x, y, i) => {
+    chart.data.datasets[i ?? 0].data.push({ x, y });
 
     if (!round_is_test) {
         const on_range = is_on_range(y, x);
@@ -103,6 +118,7 @@ const add_chart_point = (x, y) => {
 };
 
 const clear_graph = () => {
-    chart.data.datasets.length = 1; // remove all other datasets
+    chart.data.datasets.length = 2; // remove all other datasets
     chart.data.datasets[0].data.length = 0; // remove temperature points
+    chart.data.datasets[1].data.length = 0; // remove temperature points
 }
