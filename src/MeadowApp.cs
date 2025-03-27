@@ -392,6 +392,7 @@ namespace TemperatureWarriorCode
                 {
                     // En caso de cancelación por temperature alta, escapar de loop
                     // (notificación a cliente se maneja abajo)
+                    Resolver.Log.Info($"Tarea cancelada: {cancellationReason}");
                     break;
                 }
             }
