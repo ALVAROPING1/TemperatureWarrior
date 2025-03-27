@@ -407,7 +407,11 @@ namespace TemperatureWarriorCode
                 RegisterTimeControllerTemperature(timeController);
 
             // Send remaining data
-            await NotifyClient(webServer, connection);
+            if (
+                !shutdownCancellationToken.IsCancellationRequested
+                || cancellationReason != CancellationReason.ConnectionLost
+            )
+                await NotifyClient(webServer, connection);
 
             if (!cmd.isTest)
             { // Apagar actuador en caso de no ser un test de
