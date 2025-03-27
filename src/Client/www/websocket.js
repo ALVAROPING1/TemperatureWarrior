@@ -25,7 +25,13 @@ function onMessage(webSocket) {
     return async e => {
         const json = await e.data.text?.() ?? e.data;
         console.log(json);
-        const message = JSON.parse(json);
+        let message;
+        try {
+            message = JSON.parse(json);
+        } catch (error) {
+            console.warn(error);
+            return;
+        }
         console.log(message.type);
 
         let t
@@ -288,8 +294,9 @@ function onClose(_) {
  * @returns {EventListener}
  */
 function onError(_) {
-    return _ => {
+    return e => {
         console.warn("===== CONNECTION ERROR =====");
+        console.warn(e);
         show_connect_error("Error en la conexsión");
     };
 }
