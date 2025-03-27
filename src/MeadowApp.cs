@@ -123,27 +123,6 @@ namespace TemperatureWarriorCode
                 return;
             }
 
-            Resolver.Log.Info("[MeadowApp] Connecting to WiFi ...");
-            try
-            {
-                await wifi.Connect(Secrets.WIFI_NAME, Secrets.WIFI_PASSWORD);
-            }
-            catch (NetworkException e)
-            {
-                Resolver.Log.Error(
-                    $"ERROR: No se pudo establecer conexión a SSID: {Secrets.WIFI_NAME}\n"
-                        + $"    - Error cause: {e}"
-                );
-                return;
-            }
-            if (!wifi.IsConnected)
-            {
-                Resolver.Log.Error(
-                    $"ERROR: No se pudo establecer conexión a SSID: {Secrets.WIFI_NAME}"
-                );
-                return;
-            }
-
             wifi.NetworkConnected += async (networkAdapter, networkConnectionEventArgs) =>
             {
                 Resolver.Log.Info($"[MeadowApp] Connected to WiFi -> {networkAdapter.IpAddress}");
@@ -161,6 +140,21 @@ namespace TemperatureWarriorCode
                 webServer.ConnectionFinished += ConnectionFinishedHandler;
                 await webServer.Start();
             };
+
+            Resolver.Log.Info("[MeadowApp] Connecting to WiFi ...");
+            while (!wifi.IsConnected)
+            {
+                try
+                {
+                    await wifi.Connect(Secrets.WIFI_NAME, Secrets.WIFI_PASSWORD);
+                }
+                catch (NetworkException _)
+                {
+                    Resolver.Log.Error(
+                        $"ERROR: No se pudo establecer conexión a SSID: {Secrets.WIFI_NAME}\n"
+                    );
+                }
+            }
         }
 
         /// Method to stop the application
