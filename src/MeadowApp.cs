@@ -25,7 +25,7 @@ namespace TemperatureWarriorCode
         LowPassFilter sensor_filter;
         TimeSpan sensorSampleTime = TimeSpan.FromSeconds(0.1);
 
-        double currentTemperature;
+        double temp_smoothed;
         double temp_raw;
 
         TemperatureController temperatureController;
@@ -100,7 +100,7 @@ namespace TemperatureWarriorCode
             // TODO: Inicializar sensores de actuadores
 
             temperatureController = new TemperatureController(dt: sensorSampleTime.Milliseconds);
-            sensor_filter = new LowPassFilter(((double)sensorSampleTime.Milliseconds) / 1000, 0.15);
+            sensor_filter = new LowPassFilter(((double)sensorSampleTime.Milliseconds) / 1000, 0.2);
 
             // Configuración de Sensor de Temperatura
             sensor = new AnalogTemperature(
@@ -178,10 +178,10 @@ namespace TemperatureWarriorCode
         /// Method to handle updates on the temperature
         private void TemperatureUpdateHandler(object sender, IChangeResult<Temperature> e)
         {
-            double temp = e.New.Celsius;
-            temp_raw = temp;
-            temp = sensor_filter.filter(temp);
-            currentTemperature = temp;
+            double measurement = e.New.Celsius;
+            temp_smoothed = sensor_filter.filter(measurement);
+            if (Math.Abs(temp_smoothed - measurement) < 1)
+                temp_raw = measurement;
             // Resolver.Log.Info($"[MeadowApp] DEBUG: Current
             // temperature={currentTemperature}");
 
@@ -192,12 +192,12 @@ namespace TemperatureWarriorCode
             }
             temperatureHandlerRunning = true;
 
-            if (temp >= 55.0)
+            if (temp_smoothed >= 55.0)
             {
                 TemperatureTooHighHandler();
                 return;
             }
-            temperatureController.update(temp);
+            temperatureController.update(temp_smoothed);
 
             temperatureHandlerRunning = false;
         }
@@ -292,9 +292,8 @@ namespace TemperatureWarriorCode
 
         private void RegisterTimeControllerTemperature(TimeController timeController)
         {
-            var currTemp = currentTemperature;
-            timeController.RegisterTemperature(currTemp);
-            if (!nextNotificationsBuffer.Enqueue(currTemp))
+            timeController.RegisterTemperature(temp_raw);
+            if (!nextNotificationsBuffer.Enqueue(temp_smoothed))
                 Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de notifiaciones");
             if (!orig_temp.Enqueue(temp_raw))
                 Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de notifiaciones");
@@ -428,7 +427,7 @@ namespace TemperatureWarriorCode
                     case CancellationReason.TempTooHigh:
                         await webServer.SendMessage(
                             connection,
-                            $"{{ \"type\": \"TempTooHigh\", \"message\": \"High Temperature Emergency Stop {currentTemperature}\" }}"
+                            $"{{ \"type\": \"TempTooHigh\", \"message\": \"High Temperature Emergency Stop {temp_smoothed}\" }}"
                         );
                         break;
                     case CancellationReason.ShutdownCommand:
