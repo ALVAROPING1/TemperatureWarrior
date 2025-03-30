@@ -100,7 +100,10 @@ namespace TemperatureWarriorCode
             // TODO: Inicializar sensores de actuadores
 
             temperatureController = new TemperatureController(dt: sensorSampleTime.Milliseconds);
-            sensor_filter = new LowPassFilter(((double)sensorSampleTime.Milliseconds) / 1000, 0.2);
+            sensor_filter = new LowPassFilter(
+                ((double)sensorSampleTime.Milliseconds) / 1000,
+                Config.SENSOR_FILTER_CONSTANT
+            );
 
             // Configuración de Sensor de Temperatura
             sensor = new AnalogTemperature(
@@ -180,7 +183,7 @@ namespace TemperatureWarriorCode
         {
             double measurement = e.New.Celsius;
             temp_smoothed = sensor_filter.filter(measurement);
-            if (Math.Abs(temp_smoothed - measurement) < 1)
+            if (Math.Abs(temp_smoothed - measurement) < Config.TEMP_THRESHOLD)
                 temp_raw = measurement;
             // Resolver.Log.Info($"[MeadowApp] DEBUG: Current
             // temperature={currentTemperature}");
@@ -192,7 +195,7 @@ namespace TemperatureWarriorCode
             }
             temperatureHandlerRunning = true;
 
-            if (temp_smoothed >= 55.0)
+            if (temp_smoothed >= Config.MAX_TEMP)
             {
                 TemperatureTooHighHandler();
                 return;

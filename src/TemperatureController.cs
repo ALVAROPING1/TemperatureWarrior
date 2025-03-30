@@ -120,7 +120,7 @@ namespace TemperatureWarriorCode
 
         public PIDController()
         {
-            derivative_filter = new LowPassFilter(0.1, 1.0 / 10);
+            derivative_filter = new LowPassFilter(0.1, Config.DERIVATIVE_FILTER_CONSTANT);
         }
 
         /// Change the PID constants
@@ -189,9 +189,7 @@ namespace TemperatureWarriorCode
 
         public LowPassFilter(double dt, double rc)
         {
-
             this.alpha = dt / (rc + dt);
-            Resolver.Log.Info($"{this.alpha}={dt},{rc}");
         }
 
         /// Reset the filter to an initial default value
