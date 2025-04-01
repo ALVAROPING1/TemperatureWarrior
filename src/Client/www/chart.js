@@ -107,7 +107,7 @@ const add_chart_point = (x, y, i) => {
         chart.data.datasets[0].pointBackgroundColor.push(color);
 
         // also update the seconds in range span
-        if (on_range) {
+        if (i === 0 && on_range) {
             let seconds = parseFloat(seconds_in_range_span.innerText);
             seconds_in_range_span.innerText = (seconds + refresh_rate).toFixed(1);
         }
