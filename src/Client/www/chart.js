@@ -63,7 +63,7 @@ const init_graph = () => {
             },
             plugins: {
                 legend: { display: false },
-            }
+            },
         },
     });
 };
@@ -112,9 +112,6 @@ const add_chart_point = (x, y, i) => {
             seconds_in_range_span.innerText = (seconds + refresh_rate).toFixed(1);
         }
     }
-    chart.update();
-
-
 };
 
 const clear_graph = () => {

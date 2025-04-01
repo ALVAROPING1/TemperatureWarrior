@@ -53,6 +53,7 @@ function onMessage(webSocket) {
                         add_chart_point(t, temp, 1);
                     t += refresh_rate;
                 }
+                chart.update();
                 break;
 
             case 'TempTooHigh':
@@ -90,10 +91,10 @@ function onMessage(webSocket) {
                 }
                 for (const temp of message.temp) {
                     if (!isNaN(temp))
-                        add_chart_point(t, temp);
+                        add_chart_point(t, temp, 1);
                     t += refresh_rate
                 }
-
+                chart.update();
                 stop_round();
                 if (round_is_test) {
                     testBtn.textContent = 'Test Sensor';
