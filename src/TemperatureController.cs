@@ -1,5 +1,5 @@
 ﻿using System;
-using Meadow;
+using Meadow.Hardware;
 
 namespace TemperatureWarriorCode
 {
@@ -25,18 +25,20 @@ namespace TemperatureWarriorCode
         /// Actuator for cooling the system
         Actuator cooler;
 
-        public TemperatureController(long dt)
+        public TemperatureController(long dt, IPwmPort cooler_pwm, IPwmPort heater_pwm)
         {
             this.dt = dt;
             pid = new PIDController();
-            heater = new Actuator();
-            cooler = new Actuator();
+            heater = new Actuator(heater_pwm);
+            cooler = new Actuator(cooler_pwm);
         }
 
         /// Start the controller
         public void Start()
         {
             pid.reset();
+            heater.start();
+            cooler.start();
             isWorking = true;
         }
 
@@ -45,6 +47,8 @@ namespace TemperatureWarriorCode
         {
             heater.set(0);
             cooler.set(0);
+            heater.stop();
+            cooler.stop();
             isWorking = false;
         }
 
@@ -212,16 +216,30 @@ namespace TemperatureWarriorCode
 
     class Actuator
     {
-        public Actuator()
+        IPwmPort pwm;
+
+        public Actuator(IPwmPort pwm)
         {
-            // TODO:
+            this.pwm = pwm;
         }
 
         /// Set the power of the actuator. Input should be a value between 0
         /// (completely off) and 1 (completely on)
         public void set(double x)
         {
-            // TODO:
+            pwm.DutyCycle = x;
+        }
+
+        /// Starts the actuator
+        public void start()
+        {
+            pwm.Start();
+        }
+
+        /// Stops the actuator
+        public void stop()
+        {
+            pwm.Stop();
         }
     }
 }

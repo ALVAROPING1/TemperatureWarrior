@@ -99,7 +99,6 @@ namespace TemperatureWarriorCode
         {
             // TODO: Inicializar sensores de actuadores
 
-            temperatureController = new TemperatureController(dt: sensorSampleTime.Milliseconds);
             sensor_filter = new LowPassFilter(
                 ((double)sensorSampleTime.Milliseconds) / 1000,
                 Config.SENSOR_FILTER_CONSTANT
@@ -113,6 +112,23 @@ namespace TemperatureWarriorCode
 
             sensor.Updated += TemperatureUpdateHandler;
             sensor.StartUpdating(sensorSampleTime);
+
+            var cooler = Device.CreatePwmPort(
+                Device.Pins.D02,
+                new Frequency(60, Frequency.UnitType.Hertz),
+                0.0f
+            );
+            var heater = Device.CreatePwmPort(
+                Device.Pins.D04,
+                new Frequency(60, Frequency.UnitType.Hertz),
+                0.0f
+            );
+
+            temperatureController = new TemperatureController(
+                dt: sensorSampleTime.Milliseconds,
+                cooler,
+                heater
+            );
         }
 
         /// Connects to the WiFi network and launches the web server
