@@ -135,12 +135,13 @@ function onMessage(webSocket) {
 
 /**
  * @param {string} id
+ * @param {boolean} allow_negative
  * @returns {number?}
  **/
-function get_field_value(id) {
+function get_field_value(id, allow_negative) {
     const elem = /** @type {HTMLButtonElement?} */ (document.getElementById(id));
     const value = parseInt(elem?.value ?? "");
-    if (isNaN(value) || value <= 0) {
+    if (isNaN(value) || (!allow_negative && value <= 0)) {
         elem?.classList.add('error');
         return null;
     }
@@ -165,13 +166,13 @@ function sendRound(webSocket) {
 
         hide_range_errors();
 
-        const refreshInMilliseconds = get_field_value("rate");
+        const refreshInMilliseconds = get_field_value("rate", false);
         if (refreshInMilliseconds == null) return;
-        const kp = get_field_value("kp");
+        const kp = get_field_value("kp", true);
         if (kp == null) return;
-        const ki = get_field_value("ki");
+        const ki = get_field_value("ki", true);
         if (ki == null) return;
-        const kd = get_field_value("kd");
+        const kd = get_field_value("kd", true);
         if (kd == null) return;
 
         const message = {
