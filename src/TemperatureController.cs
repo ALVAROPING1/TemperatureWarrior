@@ -65,10 +65,10 @@ namespace TemperatureWarriorCode
         }
 
         /// Function to call during the main update loop
-        public void update(double temp)
+        public double update(double temp)
         {
             if (!isWorking)
-                return;
+                return 0;
             // Update the controller to get the next control output
             double control = pid.update(temp, dt);
             // If it's positive, we must heat up the system
@@ -83,6 +83,7 @@ namespace TemperatureWarriorCode
                 heater.set(0);
                 cooler.set(-control);
             }
+            return control;
         }
     }
 

@@ -27,6 +27,7 @@ namespace TemperatureWarriorCode
 
         double temp_smoothed;
         double temp_raw;
+        double output;
 
         TemperatureController temperatureController;
         bool temperatureHandlerRunning = false; // Evitar overlapping de handlers
@@ -57,8 +58,9 @@ namespace TemperatureWarriorCode
         Command? currentCommand;
 
         /// Buffer de actualizaciones a enviar en la próxima notifiación al cliente
-        RingBuffer<double> nextNotificationsBuffer = new();
-        RingBuffer<double> orig_temp = new();
+        RingBuffer<double> temp_raw_buf = new();
+        RingBuffer<double> temp_smooth_buf = new();
+        RingBuffer<double> output_buf = new();
         readonly long notificationPeriodInMilliseconds = 1000;
 
         /// El modo de ejecución del sistema
@@ -97,8 +99,6 @@ namespace TemperatureWarriorCode
         /// Configures the sensors
         private void SensorSetup()
         {
-            // TODO: Inicializar sensores de actuadores
-
             sensor_filter = new LowPassFilter(
                 ((double)sensorSampleTime.Milliseconds) / 1000,
                 Config.SENSOR_FILTER_CONSTANT
@@ -216,7 +216,7 @@ namespace TemperatureWarriorCode
                 TemperatureTooHighHandler();
                 return;
             }
-            temperatureController.update(temp_smoothed);
+            output = temperatureController.update(temp_smoothed);
 
             temperatureHandlerRunning = false;
         }
@@ -301,21 +301,28 @@ namespace TemperatureWarriorCode
             );
         }
 
-        private Task NotifyClient(WebSocketServer webServer, NetworkStream connection)
+        private async Task NotifyClient(WebSocketServer webServer, NetworkStream connection)
         {
-            return webServer.SendMessage(
-                connection,
-                $"{{ \"type\": \"N\", \"ns\": {SerializeNextNotifications(nextNotificationsBuffer)}, \"temp\": {SerializeNextNotifications(orig_temp)}}}"
-            );
+            while (
+                !temp_raw_buf.is_empty() || !temp_smooth_buf.is_empty() || !output_buf.is_empty()
+            )
+            {
+                await webServer.SendMessage(
+                    connection,
+                    $"{{ \"type\": \"N\", \"ns\": [{SerializeNextNotifications(temp_raw_buf)}, {SerializeNextNotifications(temp_smooth_buf)}, {SerializeNextNotifications(output_buf)}]}}"
+                );
+            }
         }
 
         private void RegisterTimeControllerTemperature(TimeController timeController)
         {
             timeController.RegisterTemperature(temp_raw);
-            if (!nextNotificationsBuffer.Enqueue(temp_smoothed))
-                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de notifiaciones");
-            if (!orig_temp.Enqueue(temp_raw))
-                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de notifiaciones");
+            if (!temp_raw_buf.Enqueue(temp_raw))
+                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de temp raw");
+            if (!temp_smooth_buf.Enqueue(temp_smoothed))
+                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de temp smooth");
+            if (!output_buf.Enqueue(output))
+                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de output");
         }
 
         // TW Combat Round
@@ -373,8 +380,9 @@ namespace TemperatureWarriorCode
                 Math.Ceiling(notificationPeriodInMilliseconds / (double)cmd.refreshInMilliseconds);
             var newSize = 2 * notifications;
 
-            nextNotificationsBuffer.ResizeAndReset(newSize);
-            orig_temp.ResizeAndReset(newSize);
+            temp_smooth_buf.ResizeAndReset(newSize);
+            temp_raw_buf.ResizeAndReset(newSize);
+            output_buf.ResizeAndReset(newSize);
 
             GC.Collect();
 
@@ -416,6 +424,12 @@ namespace TemperatureWarriorCode
             }
 
             // Apagar actuadores y desactivar timers/librería de registro de temp
+            if (!cmd.isTest)
+            { // Apagar actuador en caso de no ser un test de
+                // sensor de temperatura
+                temperatureController.Stop();
+                Thread.Sleep(100);
+            }
             notificationTimer.Dispose();
             registerTimer.Dispose();
 
@@ -430,13 +444,6 @@ namespace TemperatureWarriorCode
                 || cancellationReason != CancellationReason.ConnectionLost
             )
                 await NotifyClient(webServer, connection);
-
-            if (!cmd.isTest)
-            { // Apagar actuador en caso de no ser un test de
-                // sensor de temperatura
-                temperatureController.Stop();
-                Thread.Sleep(100);
-            }
 
             if (shutdownCancellationToken.IsCancellationRequested)
             { // Notificar finalización por altas
@@ -470,10 +477,10 @@ namespace TemperatureWarriorCode
                         timeController.TimeOutOfRangeInMilliseconds;
                     totalOperationTimeInMilliseconds += total_time;
                     Resolver.Log.Info(
-                        $"Global - Tiempo dentro del rango {totalTimeInRangeInMilliseconds} ms de {totalOperationTimeInMilliseconds}s"
+                        $"Global - Tiempo dentro del rango {totalTimeInRangeInMilliseconds} ms de {totalOperationTimeInMilliseconds} ms"
                     );
                     Resolver.Log.Info(
-                        $"Global - Tiempo fuera del rango {totalTimeOutOfRangeInMilliseconds} ms de {totalOperationTimeInMilliseconds}s"
+                        $"Global - Tiempo fuera del rango {totalTimeOutOfRangeInMilliseconds} ms de {totalOperationTimeInMilliseconds} ms"
                     );
                 }
 
@@ -488,7 +495,7 @@ namespace TemperatureWarriorCode
                 // buffer
                 await webServer.SendMessage(
                     connection,
-                    $"{{ \"type\": \"RoundFinished\", \"timeInRange\": {timeController.TimeInRangeInMilliseconds}, \"ns\": {SerializeNextNotifications(nextNotificationsBuffer)}, \"temp\": {SerializeNextNotifications(orig_temp)}}}"
+                    $"{{ \"type\": \"RoundFinished\", \"timeInRange\": {timeController.TimeInRangeInMilliseconds}}}"
                 );
             }
 
@@ -518,9 +525,13 @@ namespace TemperatureWarriorCode
         )
         {
             writer.WriteStartArray();
+            int n = 0;
             while (value.Dequeue(out double item))
             {
                 writer.WriteNumberValue(Math.Round(item, 2));
+                n++;
+                if (n >= 5)
+                    break;
             }
             writer.WriteEndArray();
         }

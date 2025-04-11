@@ -6,7 +6,7 @@ let ranges_changed = false;
 let connected = false;
 let round_started = false;
 let round_updates_counter = 0;
-let current_time = 0;
+let current_time = [0, 0, 0];
 let refresh_rate = 0;
 /** @type {TemperatureRange[]} */
 let global_ranges;
@@ -34,7 +34,6 @@ function onMessage(webSocket) {
         }
         console.log(message.type);
 
-        let t
         switch (message.type) {
             case 'N':
                 console.log("received N");
@@ -42,18 +41,20 @@ function onMessage(webSocket) {
                 if (round_updates_counter == 0)
                     change_round_status('running');
                 round_updates_counter += 1;
-                t = current_time;
-                for (const temp of message.ns) {
-                    if (!isNaN(temp))
-                        add_chart_point(current_time, temp);
-                    current_time += refresh_rate;
+                for (const i of [0, 1]) {
+                    for (const temp of message.ns[i]) {
+                        if (!isNaN(temp))
+                            add_chart_point(current_time[i], temp, i);
+                        current_time[i] += refresh_rate;
+                    }
                 }
-                for (const temp of message.temp) {
-                    if (!isNaN(temp))
-                        add_chart_point(t, temp, 1);
-                    t += refresh_rate;
+                for (const output of message.ns[2]) {
+                    if (!isNaN(output))
+                        chart_output.data.datasets[0].data.push({ x: current_time[2], y: output });
+                    current_time[2] += refresh_rate;
                 }
                 chart.update();
+                chart_output.update();
                 break;
 
             case 'TempTooHigh':
@@ -83,18 +84,7 @@ function onMessage(webSocket) {
                 break;
 
             case 'RoundFinished':
-                t = current_time;
-                for (const temp of message.ns) {
-                    if (!isNaN(temp))
-                        add_chart_point(current_time, temp);
-                    current_time += refresh_rate
-                }
-                for (const temp of message.temp) {
-                    if (!isNaN(temp))
-                        add_chart_point(t, temp, 1);
-                    t += refresh_rate
-                }
-                chart.update();
+                console.log("Round finished");
                 stop_round();
                 if (round_is_test) {
                     testBtn.textContent = 'Test Sensor';
@@ -124,7 +114,7 @@ function onMessage(webSocket) {
                     startBtn.disabled = false;
                     change_round_status('ready');
                 }
-                current_time = 0;
+                current_time = [0, 0, 0];
                 break;
             default:
                 console.warn(`Mensaje no reconocido: ${json}`);

@@ -23,6 +23,11 @@ namespace RingBuffer
             ResizeAndReset(capacity);
         }
 
+        public bool is_empty()
+        {
+            return tail == head;
+        }
+
         public bool Dequeue(out T result)
         {
             result = default!;
@@ -49,13 +54,13 @@ namespace RingBuffer
 
         public void ResizeAndReset(int newCapacity)
         {
+            head = 0;
+            tail = 0;
             if (newCapacity <= buffer.Capacity)
                 return;
             buffer.Capacity = newCapacity;
             for (int i = buffer.Count; i < buffer.Capacity; ++i)
                 buffer.Add(default!);
-            head = 0;
-            tail = 0;
         }
     }
 }
