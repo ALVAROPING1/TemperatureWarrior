@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 let chart;
+let chart_output
 
 const init_graph = () => {
     const ctx = document.getElementById('chart')?.getContext('2d');
@@ -66,6 +67,44 @@ const init_graph = () => {
             },
         },
     });
+
+    const ctx2 = document.getElementById('chart-output')?.getContext('2d');
+    chart_output = new Chart(ctx2, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Output',
+                    data: [],
+                    borderWidth: 1,
+                    pointBorderColor: [],
+                    pointBackgroundColor: [],
+                },
+            ],
+        },
+        options: {
+            scales: {
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Output',
+                    },
+                    min: -1.5,
+                    max: 1.5,
+                },
+                x: {
+                    type: 'linear',
+                    title: {
+                        display: true,
+                        text: 'Tiempo (s)',
+                    },
+                    min: 0,
+                },
+            },
+            plugins: { legend: { display: false } },
+        },
+    });
 };
 
 /** @param {TemperatureRange[]} ranges */
@@ -87,7 +126,9 @@ const set_round_chart = ranges => {
         t += range.roundTime;
     });
     chart.options.scales.x.max = t;
+    chart_output.options.scales.x.max = t;
     chart.update();
+    chart_output.update();
 };
 
 const set_test_chart = () => {
@@ -95,6 +136,7 @@ const set_test_chart = () => {
     chart.options.scales.x.max = 60;
 
     chart.update();
+    chart_output.update();
 };
 
 const add_chart_point = (x, y, i) => {
@@ -118,4 +160,7 @@ const clear_graph = () => {
     chart.data.datasets.length = 2; // remove all other datasets
     chart.data.datasets[0].data.length = 0; // remove temperature points
     chart.data.datasets[1].data.length = 0; // remove temperature points
+
+    chart_output.data.datasets.length = 1; // remove all other datasets
+    chart_output.data.datasets[0].data.length = 0; // remove output points
 }
