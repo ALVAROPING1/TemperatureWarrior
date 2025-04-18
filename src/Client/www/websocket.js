@@ -125,13 +125,14 @@ function onMessage(webSocket) {
 
 /**
  * @param {string} id
- * @param {boolean} allow_negative
+ * @param {boolean} allow_real
  * @returns {number?}
  **/
-function get_field_value(id, allow_negative) {
+function get_field_value(id, allow_real) {
     const elem = /** @type {HTMLButtonElement?} */ (document.getElementById(id));
-    const value = parseInt(elem?.value ?? "");
-    if (isNaN(value) || (!allow_negative && value <= 0)) {
+    const parser = allow_real? parseFloat : parseInt;
+    const value = parser(elem?.value ?? "");
+    if (isNaN(value) || (!allow_real && value <= 0)) {
         elem?.classList.add('error');
         return null;
     }
