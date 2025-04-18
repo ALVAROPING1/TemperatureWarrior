@@ -12,7 +12,7 @@ const init_graph = () => {
             labels: [],
             datasets: [
                 {
-                    label: 'Temperatura (°C)',
+                    label: 'Temperatura Raw Filtered (°C)',
                     data: [],
                     borderWidth: 1,
                     pointBorderColor: [],
@@ -27,7 +27,7 @@ const init_graph = () => {
                     },
                 },
                 {
-                    label: 'Temperatura Raw (°C)',
+                    label: 'Temperatura Smoothed (°C)',
                     data: [],
                     borderWidth: 1,
                     pointBorderColor: [],
@@ -44,6 +44,7 @@ const init_graph = () => {
             ],
         },
         options: {
+            animation: false,
             scales: {
                 y: {
                     title: {
