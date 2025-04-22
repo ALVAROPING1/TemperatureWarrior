@@ -423,13 +423,6 @@ namespace TemperatureWarriorCode
                 }
             }
 
-            // Apagar actuadores y desactivar timers/librería de registro de temp
-            if (!cmd.isTest)
-            { // Apagar actuador en caso de no ser un test de
-                // sensor de temperatura
-                temperatureController.Stop();
-                Thread.Sleep(100);
-            }
             notificationTimer.Dispose();
             registerTimer.Dispose();
 
@@ -438,12 +431,13 @@ namespace TemperatureWarriorCode
             if (total_time / cmd.refreshInMilliseconds == 0)
                 RegisterTimeControllerTemperature(timeController);
 
-            // Send remaining data
-            if (
-                !shutdownCancellationToken.IsCancellationRequested
-                || cancellationReason != CancellationReason.ConnectionLost
-            )
-                await NotifyClient(webServer, connection);
+            // Apagar actuadores y desactivar timers/librería de registro de temp
+            if (!cmd.isTest)
+            { // Apagar actuador en caso de no ser un test de
+                // sensor de temperatura
+                temperatureController.Stop();
+                Thread.Sleep(100);
+            }
 
             if (shutdownCancellationToken.IsCancellationRequested)
             { // Notificar finalización por altas
@@ -493,6 +487,7 @@ namespace TemperatureWarriorCode
 
                 // Indicar finalización y enviar datos de refresco restantes en el
                 // buffer
+                await NotifyClient(webServer, connection);
                 await webServer.SendMessage(
                     connection,
                     $"{{ \"type\": \"RoundFinished\", \"timeInRange\": {timeController.TimeInRangeInMilliseconds}}}"
