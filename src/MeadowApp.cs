@@ -115,12 +115,12 @@ namespace TemperatureWarriorCode
 
             var cooler = Device.CreatePwmPort(
                 Device.Pins.D02,
-                new Frequency(60, Frequency.UnitType.Hertz),
+                new Frequency(10, Frequency.UnitType.Hertz),
                 0.0f
             );
             var heater = Device.CreatePwmPort(
                 Device.Pins.D04,
-                new Frequency(60, Frequency.UnitType.Hertz),
+                new Frequency(10, Frequency.UnitType.Hertz),
                 0.0f
             );
 
