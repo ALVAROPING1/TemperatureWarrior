@@ -123,6 +123,10 @@ body {
     color: #00FA9A;
 }
 
+.connection-start {
+    color: orange;
+}
+
 .server-settings .messages {
     height: 1rem;
     color: #B22222;

@@ -1,6 +1,8 @@
 // @ts-check
 
 const PASS = "gpFz#JD&It|BKNDV";
+const mock_event = /** @type {Event} */ ({ preventDefault: () => { } });
+const TWO_PHASE_INIT = true;
 
 let ranges_changed = false;
 let connected = false;
@@ -12,6 +14,7 @@ let refresh_rate = 0;
 let global_ranges;
 let total_time = 0;
 let round_is_test = false;
+let initialized = false;
 
 const testBtn = /** @type {HTMLButtonElement}*/ (document.getElementById("test-sensor"));
 const sendBtn = /** @type {HTMLButtonElement}*/ (document.getElementById("send-round"));
@@ -37,6 +40,10 @@ function onMessage(webSocket) {
         switch (message.type) {
             case 'N':
                 console.log("received N");
+                if (!initialized) {
+                    initialized = true;
+                    setTimeout(finish_init, 5000, webSocket)
+                }
                 if (!round_started) return;
                 if (round_updates_counter == 0)
                     change_round_status('running');
@@ -130,7 +137,7 @@ function onMessage(webSocket) {
  **/
 function get_field_value(id, allow_real) {
     const elem = /** @type {HTMLButtonElement?} */ (document.getElementById(id));
-    const parser = allow_real? parseFloat : parseInt;
+    const parser = allow_real ? parseFloat : parseInt;
     const value = parser(elem?.value ?? "");
     if (isNaN(value) || (!allow_real && value <= 0)) {
         elem?.classList.add('error');
@@ -248,17 +255,36 @@ function sendShutdown(webSocket) {
 }
 
 /**
- * @param {WebSocket} _
+ * @param {WebSocket} webSocket
  * @returns {EventListener}
  */
-function onOpen(_) {
+function onOpen(webSocket) {
     return _ => {
         connected = true;
         console.log("===== CONNECTION OPEN =====");
+        initialized = !TWO_PHASE_INIT;
         document.querySelector('.server-settings .connect-field')?.classList.add('hide');
         document.querySelector('.server-settings .messages')?.classList.add('hide');
-        document.querySelector('.server-settings .connection-success')?.classList.remove('hide');
+        document.querySelector('.server-settings .connection-start')?.classList.remove('hide');
+        if (TWO_PHASE_INIT)
+            handleTest(webSocket)(mock_event);
+        else
+            update_connection_status();
     }
+}
+
+/**
+ * @param {WebSocket} webSocket
+ * @returns {void}
+ */
+function finish_init(webSocket) {
+    handleTest(webSocket)(mock_event);
+    update_connection_status();
+}
+
+function update_connection_status() {
+    document.querySelector('.server-settings .connection-start')?.classList.add('hide');
+    document.querySelector('.server-settings .connection-success')?.classList.remove('hide');
 }
 
 /**
