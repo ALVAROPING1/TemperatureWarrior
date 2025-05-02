@@ -445,7 +445,7 @@ namespace TemperatureWarriorCode
 
             // Cuando el tiempo de operación de la ronda es divisible por el tiempo
             // de refresco, se pierde la última medición
-            if (total_time / cmd.refreshInMilliseconds == 0)
+            if (total_time % cmd.refreshInMilliseconds == 0)
                 RegisterTimeControllerTemperature(timeController);
 
             // Apagar actuadores y desactivar timers/librería de registro de temp
