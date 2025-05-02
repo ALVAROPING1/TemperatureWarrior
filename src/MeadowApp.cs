@@ -23,10 +23,13 @@ namespace TemperatureWarriorCode
         /// Sensor de temperatura
         AnalogTemperature sensor;
         LowPassFilter sensor_filter;
-        TimeSpan sensorSampleTime = TimeSpan.FromSeconds(0.1);
+        TimeSpan sensorSampleTime = TimeSpan.FromSeconds(0.02);
+        int update_count = 0;
+        const int update_mod = 5;
 
         double temp_smoothed;
         double temp_raw;
+        double[] temp_median = new double[update_mod];
         double output;
 
         TemperatureController temperatureController;
@@ -129,6 +132,11 @@ namespace TemperatureWarriorCode
                 cooler,
                 heater
             );
+
+            for (int i = 0; i < update_count; ++i)
+            {
+                temp_median[i] = 20;
+            }
         }
 
         /// Connects to the WiFi network and launches the web server
@@ -194,13 +202,22 @@ namespace TemperatureWarriorCode
             Shutdown(CancellationReason.TempTooHigh);
         }
 
+        private double get_median_temp_raw()
+        {
+            Array.Sort(temp_median);
+            return temp_median[update_mod / 2];
+        }
+
         /// Method to handle updates on the temperature
         private void TemperatureUpdateHandler(object sender, IChangeResult<Temperature> e)
         {
             double measurement = e.New.Celsius;
             temp_smoothed = sensor_filter.filter(measurement);
-            if (Math.Abs(temp_smoothed - measurement) < Config.TEMP_THRESHOLD)
-                temp_raw = measurement;
+            temp_median[update_count] = measurement;
+            update_count = (update_count + 1) % update_mod;
+            if (update_count % update_mod != 0)
+                return;
+            temp_raw = get_median_temp_raw();
             // Resolver.Log.Info($"[MeadowApp] DEBUG: Current
             // temperature={currentTemperature}");
 
