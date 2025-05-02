@@ -166,11 +166,11 @@ namespace TemperatureWarriorCode
             current = current / 100;
             double error = setpoint - current;
             bool integral_limiter =
-                (output >= 1 && error > 0) || (output <= -1 && error < 0) || integral >= 50;
-            integral += 100 / (kp * ki) * error * dt * (!integral_limiter ? 1 : 0);
-            double derivative = 100 * kd / kp * (error - prev_error) / dt;
+                (output >= 1 && error > 0) || (output <= -1 && error < 0) || integral >= 20;
+            integral += kp / ki * error * dt * (integral_limiter ? 0 : 1);
+            double derivative = kp * kd * (error - prev_error) / dt;
             derivative = derivative_filter.filter(derivative);
-            double proportional = 100 / kp * error;
+            double proportional = kp * error;
             output = proportional + integral + derivative;
             output = Math.Max(-1, Math.Min(1, output));
             prev_error = error;

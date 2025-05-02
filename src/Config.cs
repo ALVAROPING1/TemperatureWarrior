@@ -25,7 +25,7 @@ namespace TemperatureWarriorCode
         );
 
         /// Controller parameters
-        public static readonly double SENSOR_FILTER_CONSTANT = 0.65;
+        public static readonly double SENSOR_FILTER_CONSTANT = 0.3;
         public static readonly double DERIVATIVE_FILTER_CONSTANT = 0.1;
     }
 }
