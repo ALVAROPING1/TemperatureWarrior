@@ -8,7 +8,7 @@ let ranges_changed = false;
 let connected = false;
 let round_started = false;
 let round_updates_counter = 0;
-let current_time = [0, 0, 0];
+let current_time = [0, 0];
 let refresh_rate = 0;
 /** @type {TemperatureRange[]} */
 let global_ranges;
@@ -48,17 +48,15 @@ function onMessage(webSocket) {
                 if (round_updates_counter == 0)
                     change_round_status('running');
                 round_updates_counter += 1;
-                for (const i of [0, 1]) {
-                    for (const temp of message.ns[i]) {
-                        if (!isNaN(temp))
-                            add_chart_point(current_time[i], temp, i);
-                        current_time[i] += refresh_rate;
-                    }
+                for (const temp of message.ns[0]) {
+                    if (!isNaN(temp))
+                        add_chart_point(current_time[0], temp, 0);
+                    current_time[0] += refresh_rate;
                 }
-                for (const output of message.ns[2]) {
+                for (const output of message.ns[1]) {
                     if (!isNaN(output))
-                        chart_output.data.datasets[0].data.push({ x: current_time[2], y: output });
-                    current_time[2] += refresh_rate;
+                        chart_output.data.datasets[0].data.push({ x: current_time[1], y: output });
+                    current_time[1] += refresh_rate;
                 }
                 chart.update();
                 chart_output.update();
@@ -121,7 +119,7 @@ function onMessage(webSocket) {
                     startBtn.disabled = false;
                     change_round_status('ready');
                 }
-                current_time = [0, 0, 0];
+                current_time = [0, 0];
                 break;
             default:
                 console.warn(`Mensaje no reconocido: ${json}`);

@@ -12,22 +12,7 @@ const init_graph = () => {
             labels: [],
             datasets: [
                 {
-                    label: 'Temperatura Raw Filtered (°C)',
-                    data: [],
-                    borderWidth: 1,
-                    pointBorderColor: [],
-                    pointBackgroundColor: [],
-                    segment: {
-                        borderColor: seg => {
-                            if (round_is_test) return '#5DADE2';
-                            const p0 = is_on_range(seg.p0.parsed.y, seg.p0.parsed.x);
-                            const p1 = is_on_range(seg.p1.parsed.y, seg.p1.parsed.x);
-                            return p0 && p1 ? '#00FF88' : '#FF0000';
-                        }
-                    },
-                },
-                {
-                    label: 'Temperatura Smoothed (°C)',
+                    label: 'Temperatura (°C)',
                     data: [],
                     borderWidth: 1,
                     pointBorderColor: [],
@@ -158,9 +143,8 @@ const add_chart_point = (x, y, i) => {
 };
 
 const clear_graph = () => {
-    chart.data.datasets.length = 2; // remove all other datasets
+    chart.data.datasets.length = 1; // remove all other datasets
     chart.data.datasets[0].data.length = 0; // remove temperature points
-    chart.data.datasets[1].data.length = 0; // remove temperature points
 
     chart_output.data.datasets.length = 1; // remove all other datasets
     chart_output.data.datasets[0].data.length = 0; // remove output points

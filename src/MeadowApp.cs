@@ -23,11 +23,10 @@ namespace TemperatureWarriorCode
         /// Sensor de temperatura
         AnalogTemperature sensor;
         LowPassFilter sensor_filter;
-        TimeSpan sensorSampleTime = TimeSpan.FromSeconds(0.02);
+        TimeSpan sensorSampleTime = TimeSpan.FromSeconds(0.01);
         int update_count = 0;
-        const int update_mod = 5;
+        const int update_mod = 10;
 
-        double temp_smoothed;
         double temp_raw;
         double[] temp_median = new double[update_mod];
         double output;
@@ -62,7 +61,6 @@ namespace TemperatureWarriorCode
 
         /// Buffer de actualizaciones a enviar en la próxima notifiación al cliente
         RingBuffer<double> temp_raw_buf = new();
-        RingBuffer<double> temp_smooth_buf = new();
         RingBuffer<double> output_buf = new();
         readonly long notificationPeriodInMilliseconds = 1000;
 
@@ -212,7 +210,6 @@ namespace TemperatureWarriorCode
         private void TemperatureUpdateHandler(object sender, IChangeResult<Temperature> e)
         {
             double measurement = e.New.Celsius;
-            temp_smoothed = sensor_filter.filter(measurement);
             temp_median[update_count] = measurement;
             update_count = (update_count + 1) % update_mod;
             if (update_count % update_mod != 0)
@@ -228,12 +225,12 @@ namespace TemperatureWarriorCode
             }
             temperatureHandlerRunning = true;
 
-            if (temp_smoothed >= Config.MAX_TEMP)
+            if (temp_raw >= Config.MAX_TEMP)
             {
                 TemperatureTooHighHandler();
                 return;
             }
-            output = temperatureController.update(temp_smoothed);
+            output = temperatureController.update(temp_raw);
 
             temperatureHandlerRunning = false;
         }
@@ -320,13 +317,11 @@ namespace TemperatureWarriorCode
 
         private async Task NotifyClient(WebSocketServer webServer, NetworkStream connection)
         {
-            while (
-                !temp_raw_buf.is_empty() || !temp_smooth_buf.is_empty() || !output_buf.is_empty()
-            )
+            while (!temp_raw_buf.is_empty() || !output_buf.is_empty())
             {
                 await webServer.SendMessage(
                     connection,
-                    $"{{ \"type\": \"N\", \"ns\": [{SerializeNextNotifications(temp_raw_buf)}, {SerializeNextNotifications(temp_smooth_buf)}, {SerializeNextNotifications(output_buf)}]}}"
+                    $"{{ \"type\": \"N\", \"ns\": [{SerializeNextNotifications(temp_raw_buf)}, {SerializeNextNotifications(output_buf)}]}}"
                 );
             }
         }
@@ -336,8 +331,6 @@ namespace TemperatureWarriorCode
             timeController.RegisterTemperature(temp_raw);
             if (!temp_raw_buf.Enqueue(temp_raw))
                 Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de temp raw");
-            if (!temp_smooth_buf.Enqueue(temp_smoothed))
-                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de temp smooth");
             if (!output_buf.Enqueue(output))
                 Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de output");
         }
@@ -397,7 +390,6 @@ namespace TemperatureWarriorCode
                 Math.Ceiling(notificationPeriodInMilliseconds / (double)cmd.refreshInMilliseconds);
             var newSize = 2 * notifications;
 
-            temp_smooth_buf.ResizeAndReset(newSize);
             temp_raw_buf.ResizeAndReset(newSize);
             output_buf.ResizeAndReset(newSize);
 
@@ -464,7 +456,7 @@ namespace TemperatureWarriorCode
                     case CancellationReason.TempTooHigh:
                         await webServer.SendMessage(
                             connection,
-                            $"{{ \"type\": \"TempTooHigh\", \"message\": \"High Temperature Emergency Stop {temp_smoothed}\" }}"
+                            $"{{ \"type\": \"TempTooHigh\", \"message\": \"High Temperature Emergency Stop {temp_raw}\" }}"
                         );
                         break;
                     case CancellationReason.ShutdownCommand:
