@@ -8,13 +8,14 @@ let ranges_changed = false;
 let connected = false;
 let round_started = false;
 let round_updates_counter = 0;
-let current_time = [0, 0];
+let current_time = [0, 0, 0, 0, 0];
 let refresh_rate = 0;
 /** @type {TemperatureRange[]} */
 let global_ranges;
 let total_time = 0;
 let round_is_test = false;
 let initialized = false;
+let init_finish = false;
 
 const testBtn = /** @type {HTMLButtonElement}*/ (document.getElementById("test-sensor"));
 const sendBtn = /** @type {HTMLButtonElement}*/ (document.getElementById("send-round"));
@@ -44,7 +45,7 @@ function onMessage(webSocket) {
                     initialized = true;
                     setTimeout(finish_init, 5000, webSocket)
                 }
-                if (!round_started) return;
+                if (!round_started || !init_finish) return;
                 if (round_updates_counter == 0)
                     change_round_status('running');
                 round_updates_counter += 1;
@@ -53,12 +54,24 @@ function onMessage(webSocket) {
                         add_chart_point(current_time[0], temp, 0);
                     current_time[0] += refresh_rate;
                 }
-                for (const output of message.ns[1]) {
-                    if (!isNaN(output))
-                        chart_output.data.datasets[0].data.push({ x: current_time[1], y: output });
+                for (const val of message.ns[1]) {
+                    if (!isNaN(val))
+                        chart_output.data.datasets[0].data.push({ x: current_time[1], y: val });
                     current_time[1] += refresh_rate;
                 }
                 chart.update();
+                chart_output.update();
+                break;
+
+            case 'Nend':
+                console.log("received Nend");
+                for (let i = 0; i < 3; i++) {
+                    for (const val of message.ns[i]) {
+                        if (!isNaN(val))
+                            chart_output.data.datasets[i + 1].data.push({ x: current_time[i + 2], y: val });
+                        current_time[i + 2] += refresh_rate;
+                    }
+                }
                 chart_output.update();
                 break;
 
@@ -119,7 +132,7 @@ function onMessage(webSocket) {
                     startBtn.disabled = false;
                     change_round_status('ready');
                 }
-                current_time = [0, 0];
+                current_time = [0, 0, 0, 0, 0];
                 break;
             default:
                 console.warn(`Mensaje no reconocido: ${json}`);
@@ -283,6 +296,8 @@ function finish_init(webSocket) {
 function update_connection_status() {
     document.querySelector('.server-settings .connection-start')?.classList.add('hide');
     document.querySelector('.server-settings .connection-success')?.classList.remove('hide');
+    init_finish = true;
+    clear_graph();
 }
 
 /**

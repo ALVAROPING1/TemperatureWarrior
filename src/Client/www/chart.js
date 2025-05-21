@@ -64,20 +64,42 @@ const init_graph = () => {
                     label: 'Output',
                     data: [],
                     borderWidth: 1,
-                    pointBorderColor: [],
-                    pointBackgroundColor: [],
+                    borderColor: '#000000',
+                    backgroundColor: '#000000',
+                },
+                {
+                    label: 'p',
+                    data: [],
+                    borderWidth: 1,
+                    borderColor: '#ff0000',
+                    backgroundColor: '#ff0000',
+                },
+                {
+                    label: 'i',
+                    data: [],
+                    borderWidth: 1,
+                    borderColor: '#00df00',
+                    backgroundColor: '#00df00',
+                },
+                {
+                    label: 'd',
+                    data: [],
+                    borderWidth: 1,
+                    borderColor: '#00b0ff',
+                    backgroundColor: '#00b0ff',
                 },
             ],
         },
         options: {
+            animation: false,
             scales: {
                 y: {
                     title: {
                         display: true,
                         text: 'Output',
                     },
-                    min: -1.5,
-                    max: 1.5,
+                    min: -2.5,
+                    max: 2.5,
                 },
                 x: {
                     type: 'linear',
@@ -146,6 +168,9 @@ const clear_graph = () => {
     chart.data.datasets.length = 1; // remove all other datasets
     chart.data.datasets[0].data.length = 0; // remove temperature points
 
-    chart_output.data.datasets.length = 1; // remove all other datasets
+    // chart_output.data.datasets.length = 4; // remove all other datasets
     chart_output.data.datasets[0].data.length = 0; // remove output points
+    chart_output.data.datasets[1].data.length = 0; // remove output points
+    chart_output.data.datasets[2].data.length = 0; // remove output points
+    chart_output.data.datasets[3].data.length = 0; // remove output points
 }
