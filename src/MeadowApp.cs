@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 // Meadow
 using Meadow;
 using Meadow.Devices;
@@ -20,15 +21,11 @@ namespace TemperatureWarriorCode
 {
     public class MeadowApp : App<F7FeatherV2>
     {
-        /// Sensor de temperatura
-        AnalogTemperature sensor;
-        LowPassFilter sensor_filter;
-        TimeSpan sensorSampleTime = TimeSpan.FromSeconds(0.01);
-        int update_count = 0;
-        const int update_mod = 10;
+        TimeSpan sensorSampleTime = TimeSpan.FromSeconds(0.1);
+        const int oversample = 25;
+        double[] median_buffer = new double[oversample];
 
         double temp_raw;
-        double[] temp_median = new double[update_mod];
         double output;
         double p;
         double i;
@@ -104,22 +101,47 @@ namespace TemperatureWarriorCode
             return;
         }
 
+        private async Task<double> get_temp(AnalogTemperature sensor)
+        {
+            for (int i = 0; i < oversample; i++)
+            {
+                median_buffer[i] = (await sensor.Read()).Celsius;
+            }
+            Array.Sort(median_buffer);
+            return median_buffer[oversample / 2];
+        }
+
         /// Configures the sensors
         private void SensorSetup()
         {
-            sensor_filter = new LowPassFilter(
-                ((double)sensorSampleTime.Milliseconds) / 1000,
-                Config.SENSOR_FILTER_CONSTANT
-            );
+            Task.Run(async () =>
+            {
+                var sensor_filter = new LowPassFilter(
+                    ((double)sensorSampleTime.Milliseconds) / 1000,
+                    Config.SENSOR_FILTER_CONSTANT
+                );
 
-            // Configuración de Sensor de Temperatura
-            sensor = new AnalogTemperature(
-                analogPin: Device.Pins.A02,
-                sensorType: AnalogTemperature.KnownSensorType.TMP36
-            );
+                // Configuración de Sensor de Temperatura
+                var sensor = new AnalogTemperature(
+                    analogPin: Device.Pins.A02,
+                    sensorType: AnalogTemperature.KnownSensorType.TMP36,
+                    sampleInterval: TimeSpan.FromMilliseconds(0),
+                    sampleCount: 1
+                );
 
-            sensor.Updated += TemperatureUpdateHandler;
-            sensor.StartUpdating(sensorSampleTime);
+                var sw = new Stopwatch();
+                while (true)
+                {
+                    // start_ts = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
+                    sw.Restart();
+                    var measurement = await get_temp(sensor);
+                    TemperatureUpdateHandler(measurement);
+                    sw.Stop();
+                    int rest = (sensorSampleTime - sw.Elapsed).Milliseconds;
+                    if (rest > 0)
+                        await Task.Delay(rest);
+                }
+            });
 
             var cooler = Device.CreatePwmPort(
                 Device.Pins.D02,
@@ -137,11 +159,6 @@ namespace TemperatureWarriorCode
                 cooler,
                 heater
             );
-
-            for (int i = 0; i < update_count; ++i)
-            {
-                temp_median[i] = 20;
-            }
         }
 
         /// Connects to the WiFi network and launches the web server
@@ -207,21 +224,10 @@ namespace TemperatureWarriorCode
             Shutdown(CancellationReason.TempTooHigh);
         }
 
-        private double get_median_temp_raw()
-        {
-            Array.Sort(temp_median);
-            return temp_median[update_mod / 2];
-        }
-
         /// Method to handle updates on the temperature
-        private void TemperatureUpdateHandler(object sender, IChangeResult<Temperature> e)
+        private void TemperatureUpdateHandler(double temp)
         {
-            double measurement = e.New.Celsius;
-            temp_median[update_count] = measurement;
-            update_count = (update_count + 1) % update_mod;
-            if (update_count % update_mod != 0)
-                return;
-            temp_raw = get_median_temp_raw();
+            temp_raw = temp;
             // Resolver.Log.Info($"[MeadowApp] DEBUG: Current
             // temperature={currentTemperature}");
 
