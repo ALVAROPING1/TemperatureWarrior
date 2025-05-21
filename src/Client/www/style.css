@@ -13,7 +13,6 @@
 body {
     margin: 0;
     padding: 0;
-    height: 100vh;
     display: grid;
     grid-template-columns: 30rem 2fr;
     grid-template-rows: auto 1fr;
