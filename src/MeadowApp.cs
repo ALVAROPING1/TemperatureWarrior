@@ -280,6 +280,11 @@ namespace TemperatureWarriorCode
                     currentCommand = cmd;
                     currentMode = OpMode.Prep;
                     await webServer.SendMessage(connection, "{\"type\": \"ConfigOK\"}");
+                    if (!cmd.isTest)
+                    {
+                        temperatureController.SetSetpoint(getRangeSetpoint(cmd.temperatureRanges.First()));
+                        temperatureController.Start();
+                    }
                     break;
                 case Message.MessageType.Start:
                     if (!currentCommand.HasValue)
@@ -366,6 +371,10 @@ namespace TemperatureWarriorCode
                 Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de output");
         }
 
+        private static double getRangeSetpoint(TemperatureRange range) {
+            return range.MinTemp + (range.MaxTemp - range.MinTemp) * 0.5;
+        }
+
         // TW Combat Round
         private async Task StartRound(
             WebSocketServer webServer,
@@ -404,14 +413,11 @@ namespace TemperatureWarriorCode
 
             var shutdownCancellationToken = shutdownCancellationSource.Token;
 
-            double getRangeSetpoint(TemperatureRange range) =>
-                range.MinTemp + (range.MaxTemp - range.MinTemp) * 0.5;
-
-            if (!cmd.isTest)
-            {
-                temperatureController.SetSetpoint(getRangeSetpoint(cmd.temperatureRanges.First()));
-                temperatureController.Start();
-            }
+            // if (!cmd.isTest)
+            // {
+            //     temperatureController.SetSetpoint(getRangeSetpoint(cmd.temperatureRanges.First()));
+            //     temperatureController.Start();
+            // }
 
             //// Acomodar tamaño de ringbuffer y zero-out ringbuffer
             // Debemos ser capaces de ingresar ceil(notificationPeriodInMilliseconds
