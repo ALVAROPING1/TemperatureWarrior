@@ -1,12 +1,12 @@
 ﻿// C#
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Diagnostics;
 // Meadow
 using Meadow;
 using Meadow.Devices;
@@ -21,7 +21,7 @@ namespace TemperatureWarriorCode
 {
     public class MeadowApp : App<F7FeatherV2>
     {
-        TimeSpan sensorSampleTime = TimeSpan.FromSeconds(0.1);
+        const long sensorSampleTime = 100;
         const int oversample = 25;
         double[] median_buffer = new double[oversample];
 
@@ -31,15 +31,11 @@ namespace TemperatureWarriorCode
         double i;
         double d;
 
+        // long start_ts;
+
         TemperatureController temperatureController;
-        bool temperatureHandlerRunning = false; // Evitar overlapping de handlers
 
-        // Estado del actuador en un rango de temperatura
-
-        double currentSetpoint;
-        TemperatureRange currentRange;
-
-        /// Cancelación de ronda en curso
+        /// Cancelation of the current round
         CancellationTokenSource shutdownCancellationSource = new();
 
         enum CancellationReason
@@ -51,56 +47,53 @@ namespace TemperatureWarriorCode
 
         CancellationReason cancellationReason;
 
-        /// Estado inter-comando para la librería de registro de temperatura
-        int totalOperationTimeInMilliseconds = 0;
-        int totalTimeInRangeInMilliseconds = 0;
-        int totalTimeOutOfRangeInMilliseconds = 0;
-
-        /// El comando a ejecutar
+        /// Command for the round
         Command? currentCommand;
 
-        /// Buffer de actualizaciones a enviar en la próxima notifiación al cliente
+        /// Update buffers to send during the next client notification
         RingBuffer<double> temp_raw_buf = new();
         RingBuffer<double> output_buf = new();
 
         RingBuffer<double> p_buf = new();
         RingBuffer<double> i_buf = new();
         RingBuffer<double> d_buf = new();
-        readonly long notificationPeriodInMilliseconds = 1000;
 
-        /// El modo de ejecución del sistema
+        const long notification_period = 1000;
+
+        /// System state
         enum OpMode
         {
-            /// Parámetros de ronda no configurados
+            /// Waiting for round configuration
             Config,
 
-            /// Parámetros de ronda configurados, esperando comando de inicio de
-            /// combate
+            /// Waiting for round start
             Prep,
 
-            /// Ejecutando ronda
+            /// Round execution
             Combat,
         }
 
         OpMode currentMode = OpMode.Config;
 
+        // private double ts()
+        // {
+        //     long milliseconds = DateTime.Now.Ticks /
+        //     TimeSpan.TicksPerMillisecond; double ts = (double)(milliseconds -
+        //     start_ts) / 1000; start_ts = milliseconds; return ts;
+        // }
+
         /// Entry point for the application
         public override async Task Run()
         {
             Resolver.Log.Info("[MeadowApp] ### Init: Run() ###");
-
-            // Configurar sensores
             SensorSetup();
-
-            // Configurar modo inicial ('esperando configuración')
             currentMode = OpMode.Config;
-
             await LaunchNetworkAndWebserver();
-
             Resolver.Log.Info("[MeadowApp] ### Fin: Run() ###");
-            return;
         }
 
+        // Get the current temperature from the sensor. Uses the median from
+        // several measurements
         private async Task<double> get_temp(AnalogTemperature sensor)
         {
             for (int i = 0; i < oversample; i++)
@@ -116,12 +109,6 @@ namespace TemperatureWarriorCode
         {
             Task.Run(async () =>
             {
-                var sensor_filter = new LowPassFilter(
-                    ((double)sensorSampleTime.Milliseconds) / 1000,
-                    Config.SENSOR_FILTER_CONSTANT
-                );
-
-                // Configuración de Sensor de Temperatura
                 var sensor = new AnalogTemperature(
                     analogPin: Device.Pins.A02,
                     sensorType: AnalogTemperature.KnownSensorType.TMP36,
@@ -130,6 +117,7 @@ namespace TemperatureWarriorCode
                 );
 
                 var sw = new Stopwatch();
+                TimeSpan period = TimeSpan.FromMilliseconds(sensorSampleTime);
                 while (true)
                 {
                     // start_ts = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
@@ -137,34 +125,32 @@ namespace TemperatureWarriorCode
                     var measurement = await get_temp(sensor);
                     TemperatureUpdateHandler(measurement);
                     sw.Stop();
-                    int rest = (sensorSampleTime - sw.Elapsed).Milliseconds;
+                    int rest = (period - sw.Elapsed).Milliseconds;
                     if (rest > 0)
                         await Task.Delay(rest);
+                    // Resolver.Log.Info($"## [round] ## measurement dt = {ts()}s,
+                    // temp = {measurement}");
                 }
             });
 
-            var cooler = Device.CreatePwmPort(
-                Device.Pins.D02,
-                new Frequency(10, Frequency.UnitType.Hertz),
-                0.0f
-            );
-            var heater = Device.CreatePwmPort(
-                Device.Pins.D04,
-                new Frequency(10, Frequency.UnitType.Hertz),
-                0.0f
-            );
-
-            temperatureController = new TemperatureController(
-                dt: sensorSampleTime.Milliseconds,
-                cooler,
-                heater
+            TemperatureController temperatureController = new TemperatureController(
+                dt: sensorSampleTime,
+                cooler_pwm: Device.CreatePwmPort(
+                    Device.Pins.D02,
+                    new Frequency(10, Frequency.UnitType.Hertz),
+                    0.0f
+                ),
+                heater_pwm: Device.CreatePwmPort(
+                    Device.Pins.D04,
+                    new Frequency(10, Frequency.UnitType.Hertz),
+                    0.0f
+                )
             );
         }
 
         /// Connects to the WiFi network and launches the web server
         private async Task LaunchNetworkAndWebserver()
         {
-            // Configuración de Red
             var wifi = Device.NetworkAdapters.Primary<IWiFiNetworkAdapter>();
             if (wifi is null)
             {
@@ -176,12 +162,11 @@ namespace TemperatureWarriorCode
             {
                 Resolver.Log.Info($"[MeadowApp] Connected to WiFi -> {networkAdapter.IpAddress}");
 
-                // Lanzar Servidor de Comandos
                 WebSocketServer webServer = new(wifi.IpAddress, Config.Port);
                 if (webServer is null)
                 {
                     Resolver.Log.Error(
-                        "[MeadowApp] ERROR: Failed to create a " + "WebSocketServer instance"
+                        "[MeadowApp] ERROR: Failed to create a WebSocketServer instance"
                     );
                     return;
                 }
@@ -197,7 +182,7 @@ namespace TemperatureWarriorCode
                 {
                     await wifi.Connect(Secrets.WIFI_NAME, Secrets.WIFI_PASSWORD);
                 }
-                catch (NetworkException _)
+                catch (NetworkException)
                 {
                     Resolver.Log.Error(
                         $"ERROR: No se pudo establecer conexión a SSID: {Secrets.WIFI_NAME}\n"
@@ -228,24 +213,12 @@ namespace TemperatureWarriorCode
         private void TemperatureUpdateHandler(double temp)
         {
             temp_raw = temp;
-            // Resolver.Log.Info($"[MeadowApp] DEBUG: Current
-            // temperature={currentTemperature}");
-
-            if (temperatureHandlerRunning)
-            {
-                Resolver.Log.Info($"[MeadowApp] DEBUG: temperature handler already running");
-                return;
-            }
-            temperatureHandlerRunning = true;
-
             if (temp_raw >= Config.MAX_TEMP)
             {
                 TemperatureTooHighHandler();
                 return;
             }
             output = temperatureController.update(temp_raw, out p, out i, out d);
-
-            temperatureHandlerRunning = false;
         }
 
         /// Handler for messages received by the web server
@@ -258,23 +231,23 @@ namespace TemperatureWarriorCode
             switch (message.type)
             {
                 case Message.MessageType.Command:
-                    // No se puede cambiar el comando a la mitad de una ronda en curso
+                    // Can't change command during round
                     if (currentMode == OpMode.Combat)
                     {
                         Resolver.Log.Error(
-                            "[MeadowApp] Esperar a la finalización de " + "la ronda en curso"
+                            "[MeadowApp] Wait for round end"
                         );
                         await webServer.SendMessage(connection, "{\"type\": \"StateError\"}");
                         return;
                     }
                     if (!message.data.HasValue || !message.data.Value.IsValid())
                     {
-                        Resolver.Log.Error("[MeadowApp] Comando inválido");
+                        Resolver.Log.Error("[MeadowApp] Invalid command");
                         await webServer.SendMessage(connection, "{\"type\": \"Bad Format\"}");
                         return;
                     }
 
-                    Resolver.Log.Info("[MeadowApp] Comando guardado");
+                    Resolver.Log.Info("[MeadowApp] Command saved");
                     Command cmd = message.data.Value.ToCommand();
                     temperatureController.set_constants(cmd.kp, cmd.ki, cmd.kd);
                     currentCommand = cmd;
@@ -282,7 +255,9 @@ namespace TemperatureWarriorCode
                     await webServer.SendMessage(connection, "{\"type\": \"ConfigOK\"}");
                     if (!cmd.isTest)
                     {
-                        temperatureController.SetSetpoint(getRangeSetpoint(cmd.temperatureRanges.First()));
+                        temperatureController.SetSetpoint(
+                            getRangeSetpoint(cmd.temperatureRanges.First())
+                        );
                         temperatureController.Start();
                     }
                     break;
@@ -290,7 +265,7 @@ namespace TemperatureWarriorCode
                     if (!currentCommand.HasValue)
                     {
                         Resolver.Log.Error(
-                            "[MeadowApp] Configurar comando antes de " + "iniciar ejecución"
+                            "[MeadowApp] Configure command before round start"
                         );
                         await webServer.SendMessage(connection, "{\"type\": \"StateError\"}");
                         return;
@@ -298,14 +273,13 @@ namespace TemperatureWarriorCode
                     if (currentMode == OpMode.Combat)
                     {
                         Resolver.Log.Error(
-                            "[MeadowApp] No se puede lanzar una ronda "
-                                + "mientras otra está en curso"
+                            "[MeadowApp] Can't launch round during another round"
                         );
                         await webServer.SendMessage(connection, "{\"type\": \"StateError\"}");
                         return;
                     }
 
-                    Resolver.Log.Info("[MeadowApp] Iniciando ejecución de comando");
+                    Resolver.Log.Info("[MeadowApp] Starting round");
                     currentMode = OpMode.Combat;
                     await StartRound(webServer, connection, currentCommand.Value);
                     currentCommand = null;
@@ -344,8 +318,7 @@ namespace TemperatureWarriorCode
             }
         }
 
-        private async Task NotifyClientEnd(WebSocketServer webServer,
-        NetworkStream connection)
+        private async Task NotifyClientEnd(WebSocketServer webServer, NetworkStream connection)
         {
             while (!p_buf.is_empty() || !i_buf.is_empty() || !d_buf.is_empty())
             {
@@ -371,7 +344,8 @@ namespace TemperatureWarriorCode
                 Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de output");
         }
 
-        private static double getRangeSetpoint(TemperatureRange range) {
+        private static double getRangeSetpoint(TemperatureRange range)
+        {
             return range.MinTemp + (range.MaxTemp - range.MinTemp) * 0.5;
         }
 
@@ -389,7 +363,6 @@ namespace TemperatureWarriorCode
                 (acc, range) => acc + range.RangeTimeInMilliseconds
             );
 
-            // Inicialización de librería de control
             TimeController timeController = new() { DEBUG_MODE = false };
 
             if (
@@ -413,24 +386,15 @@ namespace TemperatureWarriorCode
 
             var shutdownCancellationToken = shutdownCancellationSource.Token;
 
-            // if (!cmd.isTest)
-            // {
-            //     temperatureController.SetSetpoint(getRangeSetpoint(cmd.temperatureRanges.First()));
-            //     temperatureController.Start();
-            // }
-
-            //// Acomodar tamaño de ringbuffer y zero-out ringbuffer
-            // Debemos ser capaces de ingresar ceil(notificationPeriodInMilliseconds
-            // / cmd.refreshInMilliseconds), además multiplicamos este resultado por
-            // 2 para dar algo de "wiggle room".
-            int notifications = (int)
-                Math.Ceiling(notificationPeriodInMilliseconds / (double)cmd.refreshInMilliseconds);
+            // Resize and reset ringbuffer
+            int notifications = (int)Math.Ceiling(notification_period / (double)cmd.refreshInMilliseconds);
             var newSize = 2 * notifications;
 
             temp_raw_buf.ResizeAndReset(newSize);
             output_buf.ResizeAndReset(newSize);
 
-            notifications = (int)Math.Ceiling(total_time / (double)cmd.refreshInMilliseconds); newSize = 2 * notifications;
+            notifications = (int)Math.Ceiling(total_time / (double)cmd.refreshInMilliseconds);
+            newSize = 2 * notifications;
             Resolver.Log.Info($"output size: {newSize}");
             p_buf.ResizeAndReset(newSize);
             i_buf.ResizeAndReset(newSize);
@@ -438,28 +402,25 @@ namespace TemperatureWarriorCode
 
             GC.Collect();
 
-            //// Lanzar conteo en librería de control cada refreshInMilliseconds
+            // Launch time controller and register temperature every `refreshInMilliseconds`
             void registerTimeController(object _) =>
                 RegisterTimeControllerTemperature(timeController);
             timeController.StartOperation();
             Timer registerTimer = new(registerTimeController, null, 0, cmd.refreshInMilliseconds);
-
-            // Enviar primera temperatura medida
+            // Register first temperature
             RegisterTimeControllerTemperature(timeController);
 
-            //// Notificaciones al cliente
             Timer notificationTimer = new(
                 async _ => await NotifyClient(webServer, connection),
                 null,
                 0,
-                notificationPeriodInMilliseconds
+                notification_period
             );
 
+            // Ranges loop: update setpoint and wait for the next range
             foreach (var range in cmd.temperatureRanges)
-            { // modificar setpoint en
-                // cada iteración
-                currentSetpoint = getRangeSetpoint(range);
-                currentRange = range;
+            {
+                var currentSetpoint = getRangeSetpoint(range);
                 temperatureController.SetSetpoint(currentSetpoint);
                 Resolver.Log.Info($"Iniciando rango [{range.MinTemp} - {range.MaxTemp}]");
                 try
@@ -468,8 +429,6 @@ namespace TemperatureWarriorCode
                 }
                 catch (TaskCanceledException)
                 {
-                    // En caso de cancelación por temperature alta, escapar de loop
-                    // (notificación a cliente se maneja abajo)
                     Resolver.Log.Info($"Tarea cancelada: {cancellationReason}");
                     break;
                 }
@@ -478,12 +437,9 @@ namespace TemperatureWarriorCode
             notificationTimer.Dispose();
             registerTimer.Dispose();
 
-            // Cuando el tiempo de operación de la ronda es divisible por el tiempo
-            // de refresco, se pierde la última medición
-            if (total_time % cmd.refreshInMilliseconds == 0)
-                RegisterTimeControllerTemperature(timeController);
+            // Register temperature to not miss the last range
+            RegisterTimeControllerTemperature(timeController);
 
-            // Apagar actuadores y desactivar timers/librería de registro de temp
             if (!cmd.isTest)
             {
                 temperatureController.Stop();
@@ -491,8 +447,7 @@ namespace TemperatureWarriorCode
             }
 
             if (shutdownCancellationToken.IsCancellationRequested)
-            { // Notificar finalización por altas
-                // temperaturas
+            {
                 switch (cancellationReason)
                 {
                     case CancellationReason.TempTooHigh:
@@ -512,32 +467,8 @@ namespace TemperatureWarriorCode
                 }
             }
             else
-            { // Calcular resultados
-                if (!cmd.isTest)
-                {
-                    // Solamente actualizar estado inter-ronda si no se trata de un
-                    // test de sensores
-                    totalTimeInRangeInMilliseconds += timeController.TimeInRangeInMilliseconds;
-                    totalTimeOutOfRangeInMilliseconds +=
-                        timeController.TimeOutOfRangeInMilliseconds;
-                    totalOperationTimeInMilliseconds += total_time;
-                    Resolver.Log.Info(
-                        $"Global - Tiempo dentro del rango {totalTimeInRangeInMilliseconds} ms de {totalOperationTimeInMilliseconds} ms"
-                    );
-                    Resolver.Log.Info(
-                        $"Global - Tiempo fuera del rango {totalTimeOutOfRangeInMilliseconds} ms de {totalOperationTimeInMilliseconds} ms"
-                    );
-                }
-
-                Resolver.Log.Info(
-                    $"Ronda - Tiempo dentro del rango {timeController.TimeInRangeInMilliseconds} ms de {total_time} ms"
-                );
-                Resolver.Log.Info(
-                    $"Ronda - Tiempo fuera del rango {timeController.TimeOutOfRangeInMilliseconds} ms de {total_time} ms"
-                );
-
-                // Indicar finalización y enviar datos de refresco restantes en el
-                // buffer
+            {
+                // Send round end and final data
                 await NotifyClient(webServer, connection);
                 await webServer.SendMessage(
                     connection,
@@ -553,7 +484,7 @@ namespace TemperatureWarriorCode
         }
     }
 
-    // Serialización de ringbuffer de notificaciones
+    // Ringbuffer serialization
     public class RingBufferJsonConverter : JsonConverter<RingBuffer<double>>
     {
         public override RingBuffer<double> Read(

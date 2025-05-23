@@ -20,35 +20,35 @@ namespace TemperatureWarriorCode
         PIDController pid;
 
         /// Actuator for heating the system
-        Actuator heater;
+        IPwmPort heater;
 
         /// Actuator for cooling the system
-        Actuator cooler;
+        IPwmPort cooler;
 
         public TemperatureController(long dt, IPwmPort cooler_pwm, IPwmPort heater_pwm)
         {
             this.dt = dt;
             pid = new PIDController();
-            heater = new Actuator(heater_pwm);
-            cooler = new Actuator(cooler_pwm);
+            heater = heater_pwm;
+            cooler = cooler_pwm;
         }
 
         /// Start the controller
         public void Start()
         {
             pid.reset();
-            heater.start();
-            cooler.start();
+            heater.Start();
+            cooler.Start();
             isWorking = true;
         }
 
         /// Stop the controller
         public void Stop()
         {
-            heater.set(0);
-            cooler.set(0);
-            heater.stop();
-            cooler.stop();
+            heater.DutyCycle = 0;
+            cooler.DutyCycle = 0;
+            heater.Stop();
+            cooler.Stop();
             isWorking = false;
         }
 
@@ -77,14 +77,14 @@ namespace TemperatureWarriorCode
             // If it's positive, we must heat up the system
             if (control > 0)
             {
-                heater.set(control);
-                cooler.set(0);
+                heater.DutyCycle = control;
+                cooler.DutyCycle = 0;
             }
             // If it's negative, we must cool down the system
             else if (control < 0)
             {
-                heater.set(0);
-                cooler.set(-control);
+                heater.DutyCycle = 0;
+                cooler.DutyCycle = -control;
             }
             return control;
         }
@@ -157,15 +157,6 @@ namespace TemperatureWarriorCode
         /// Calculates the next output
         public double update(double current, double dt, out double p, out double i, out double d)
         {
-            // if (temp > Config.TemperatureUpperbound.Celsius)
-            // {
-            //     return 1.0;
-            // }
-            // else if (temp < Config.TemperatureLowerbound.Celsius)
-            // {
-            //     return -1.0;
-            // }
-
             current = current / 100;
             double error = setpoint - current;
             bool integral_limiter = (output >= 1 && error > 0) || (output <= -1 && error < 0);
@@ -214,39 +205,6 @@ namespace TemperatureWarriorCode
         {
             output += alpha * (input - output);
             return output;
-        }
-    }
-
-    // ╔═══════════════════════════════════════════════════════════════════════╗
-    // ║                               Actuators                               ║
-    // ╚═══════════════════════════════════════════════════════════════════════╝
-
-    class Actuator
-    {
-        IPwmPort pwm;
-
-        public Actuator(IPwmPort pwm)
-        {
-            this.pwm = pwm;
-        }
-
-        /// Set the power of the actuator. Input should be a value between 0
-        /// (completely off) and 1 (completely on)
-        public void set(double x)
-        {
-            pwm.DutyCycle = x;
-        }
-
-        /// Starts the actuator
-        public void start()
-        {
-            pwm.Start();
-        }
-
-        /// Stops the actuator
-        public void stop()
-        {
-            pwm.Stop();
         }
     }
 }
