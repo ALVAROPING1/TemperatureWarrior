@@ -251,9 +251,9 @@ public class MeadowApp : App<F7FeatherV2>
                 await webServer.SendMessage(connection, "{\"type\": \"ConfigOK\"}");
                 if (!cmd.isTest)
                 {
-                    temperatureController.SetSetpoint(
-                        getRangeSetpoint(cmd.temperatureRanges.First())
-                    );
+                    var range = cmd.temperatureRanges.First();
+                    var target = getRangeSetpoint(range.MinTemp, range.MaxTemp);
+                    temperatureController.SetSetpoint(target);
                     temperatureController.Start();
                 }
                 break;
@@ -336,17 +336,28 @@ public class MeadowApp : App<F7FeatherV2>
             Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de output");
     }
 
-    private static double getRangeSetpoint(TemperatureRange range)
+    private static double getRangeSetpoint(double min, double max)
     {
-        return range.MinTemp + (range.MaxTemp - range.MinTemp) * 0.5;
+        return min + (max - min) * 0.5;
+    }
+
+    private async Task<bool> run_setpoint(double target, int time, CancellationToken cancel_token)
+    {
+        temperatureController.SetSetpoint(target);
+        try
+        {
+            await Task.Delay(time, cancel_token);
+        }
+        catch (TaskCanceledException)
+        {
+            Resolver.Log.Info($"Tarea cancelada: {cancellationReason}");
+            return true;
+        }
+        return false;
     }
 
     // TW Combat Round
-    private async Task StartRound(
-        WebSocketServer webServer,
-        NetworkStream connection,
-        Command cmd
-    )
+    private async Task StartRound(WebSocketServer webServer, NetworkStream connection, Command cmd)
     {
         Resolver.Log.Info("[MeadowApp] ### Init: StartRound() ###");
 
@@ -366,17 +377,12 @@ public class MeadowApp : App<F7FeatherV2>
             )
         )
         {
-            Resolver.Log.Error(
-                $"[MeadowApp] Error configurando controlador de tiempo >>> {error}"
-            );
-            await webServer.SendMessage(
-                connection,
-                "{\"type\": \"TimeControllerConfigError\"}"
-            );
+            Resolver.Log.Error($"[MeadowApp] Error configurando controlador de tiempo >>> {error}");
+            await webServer.SendMessage(connection, "{\"type\": \"TimeControllerConfigError\"}");
             return;
         }
 
-        var shutdownCancellationToken = shutdownCancellationSource.Token;
+        var cancel_token = shutdownCancellationSource.Token;
 
         // Resize and reset ringbuffer
         int notifications = (int)
@@ -397,8 +403,7 @@ public class MeadowApp : App<F7FeatherV2>
 
         // Launch time controller and register temperature every
         // `refreshInMilliseconds`
-        void registerTimeController(object _) =>
-            RegisterTimeControllerTemperature(timeController);
+        void registerTimeController(object _) => RegisterTimeControllerTemperature(timeController);
         timeController.StartOperation();
         Timer registerTimer = new(registerTimeController, null, 0, cmd.refreshInMilliseconds);
         // Register first temperature
@@ -412,20 +417,34 @@ public class MeadowApp : App<F7FeatherV2>
         );
 
         // Ranges loop: update setpoint and wait for the next range
-        foreach (var range in cmd.temperatureRanges)
+        // foreach (var range in cmd.temperatureRanges)
+        var ranges = cmd.temperatureRanges;
+        for (int i = 0; i < ranges.Length; i++)
         {
-            var currentSetpoint = getRangeSetpoint(range);
-            temperatureController.SetSetpoint(currentSetpoint);
+            var range = ranges[i];
+            var target = getRangeSetpoint(range.MinTemp, range.MaxTemp);
             Resolver.Log.Info($"Iniciando rango [{range.MinTemp} - {range.MaxTemp}]");
-            try
+            if (i == ranges.Length - 1 || range.MaxTemp - range.MinTemp <= 2)
             {
-                await Task.Delay(range.RangeTimeInMilliseconds, shutdownCancellationToken);
+                if (await run_setpoint(target, range.RangeTimeInMilliseconds, cancel_token))
+                    break;
+                continue;
             }
-            catch (TaskCanceledException)
+            var curr_min = range.MinTemp + 1;
+            var curr_max = range.MaxTemp - 1;
+            var min = Math.Max(curr_min, ranges[i + 1].MinTemp);
+            var max = Math.Min(curr_max, ranges[i + 1].MaxTemp);
+            if (max >= min)
+                target = getRangeSetpoint(min, max);
+            else
             {
-                Resolver.Log.Info($"Tarea cancelada: {cancellationReason}");
+                if (ranges[i + 1].MinTemp > range.MaxTemp)
+                    target = curr_max;
+                else
+                    target = curr_min;
+            }
+            if (await run_setpoint(target, range.RangeTimeInMilliseconds / 2, cancel_token))
                 break;
-            }
         }
 
         notificationTimer.Dispose();
@@ -440,7 +459,7 @@ public class MeadowApp : App<F7FeatherV2>
             Thread.Sleep(100);
         }
 
-        if (shutdownCancellationToken.IsCancellationRequested)
+        if (cancel_token.IsCancellationRequested)
         {
             switch (cancellationReason)
             {
