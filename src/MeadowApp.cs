@@ -17,7 +17,8 @@ using NETDuinoWar;
 using RingBuffer;
 using TemperatureWarriorCode.Web;
 
-namespace TemperatureWarriorCode {
+namespace TemperatureWarriorCode
+{
     public class MeadowApp : App<F7FeatherV2>
     {
         const long sensorSampleTime = 100;
@@ -131,19 +132,21 @@ namespace TemperatureWarriorCode {
                     // temp = {measurement}");
                 }
             });
+            var cooler = Device.CreatePwmPort(
+                Device.Pins.D02,
+                new Frequency(10, Frequency.UnitType.Hertz),
+                0.0f
+            );
+            var heater = Device.CreatePwmPort(
+                Device.Pins.D04,
+                new Frequency(10, Frequency.UnitType.Hertz),
+                0.0f
+            );
 
-            TemperatureController temperatureController = new TemperatureController(
+            temperatureController = new TemperatureController(
                 dt: sensorSampleTime,
-                cooler_pwm: Device.CreatePwmPort(
-                    Device.Pins.D02,
-                    new Frequency(10, Frequency.UnitType.Hertz),
-                    0.0f
-                ),
-                heater_pwm: Device.CreatePwmPort(
-                    Device.Pins.D04,
-                    new Frequency(10, Frequency.UnitType.Hertz),
-                    0.0f
-                )
+                cooler_pwm: cooler,
+                heater_pwm: heater
             );
         }
 
@@ -342,7 +345,11 @@ namespace TemperatureWarriorCode {
             return min + (max - min) * 0.5;
         }
 
-        private async Task<bool> run_setpoint(double target, int time, CancellationToken cancel_token)
+        private async Task<bool> run_setpoint(
+            double target,
+            int time,
+            CancellationToken cancel_token
+        )
         {
             temperatureController.SetSetpoint(target);
             try
@@ -358,7 +365,11 @@ namespace TemperatureWarriorCode {
         }
 
         // TW Combat Round
-        private async Task StartRound(WebSocketServer webServer, NetworkStream connection, Command cmd)
+        private async Task StartRound(
+            WebSocketServer webServer,
+            NetworkStream connection,
+            Command cmd
+        )
         {
             Resolver.Log.Info("[MeadowApp] ### Init: StartRound() ###");
 
@@ -378,8 +389,13 @@ namespace TemperatureWarriorCode {
                 )
             )
             {
-                Resolver.Log.Error($"[MeadowApp] Error configurando controlador de tiempo >>> {error}");
-                await webServer.SendMessage(connection, "{\"type\": \"TimeControllerConfigError\"}");
+                Resolver.Log.Error(
+                    $"[MeadowApp] Error configurando controlador de tiempo >>> {error}"
+                );
+                await webServer.SendMessage(
+                    connection,
+                    "{\"type\": \"TimeControllerConfigError\"}"
+                );
                 return;
             }
 
@@ -404,7 +420,8 @@ namespace TemperatureWarriorCode {
 
             // Launch time controller and register temperature every
             // `refreshInMilliseconds`
-            void registerTimeController(object _) => RegisterTimeControllerTemperature(timeController);
+            void registerTimeController(object _) =>
+                RegisterTimeControllerTemperature(timeController);
             timeController.StartOperation();
             Timer registerTimer = new(registerTimeController, null, 0, cmd.refreshInMilliseconds);
             // Register first temperature
@@ -418,7 +435,6 @@ namespace TemperatureWarriorCode {
             );
 
             // Ranges loop: update setpoint and wait for the next range
-            // foreach (var range in cmd.temperatureRanges)
             var ranges = cmd.temperatureRanges;
             for (int i = 0; i < ranges.Length; i++)
             {
@@ -431,6 +447,8 @@ namespace TemperatureWarriorCode {
                         break;
                     continue;
                 }
+                if (await run_setpoint(target, range.RangeTimeInMilliseconds, cancel_token))
+                    break;
                 var curr_min = range.MinTemp + 1;
                 var curr_max = range.MaxTemp - 1;
                 var min = Math.Max(curr_min, ranges[i + 1].MinTemp);
