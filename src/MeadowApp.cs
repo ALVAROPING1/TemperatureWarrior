@@ -436,18 +436,12 @@ namespace TemperatureWarriorCode
 
             // Ranges loop: update setpoint and wait for the next range
             var ranges = cmd.temperatureRanges;
-            for (int i = 0; i < ranges.Length; i++)
+            for (int i = 0; i < ranges.Length - 1; i++)
             {
                 var range = ranges[i];
                 var target = getRangeSetpoint(range.MinTemp, range.MaxTemp);
                 Resolver.Log.Info($"Iniciando rango [{range.MinTemp} - {range.MaxTemp}]");
-                if (i == ranges.Length - 1 || range.MaxTemp - range.MinTemp <= 2)
-                {
-                    if (await run_setpoint(target, range.RangeTimeInMilliseconds, cancel_token))
-                        break;
-                    continue;
-                }
-                if (await run_setpoint(target, range.RangeTimeInMilliseconds, cancel_token))
+                if (await run_setpoint(target, range.RangeTimeInMilliseconds / 2, cancel_token))
                     break;
                 var curr_min = range.MinTemp + 1;
                 var curr_max = range.MaxTemp - 1;
@@ -465,6 +459,9 @@ namespace TemperatureWarriorCode
                 if (await run_setpoint(target, range.RangeTimeInMilliseconds / 2, cancel_token))
                     break;
             }
+            var last = ranges[ranges.Length - 1];
+            var last_target = getRangeSetpoint(last.MinTemp, last.MaxTemp);
+            await run_setpoint(last_target, last.RangeTimeInMilliseconds, cancel_token);
 
             notificationTimer.Dispose();
             registerTimer.Dispose();
