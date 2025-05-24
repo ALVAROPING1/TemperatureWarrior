@@ -9,9 +9,6 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('rate').addEventListener('input', ranges_input);
-    document.getElementById('kp').addEventListener('input', ranges_input);
-    document.getElementById('ki').addEventListener('input', ranges_input);
-    document.getElementById('kd').addEventListener('input', ranges_input);
     add_range();
     init_graph();
 });

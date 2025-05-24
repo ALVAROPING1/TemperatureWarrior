@@ -8,7 +8,7 @@ let ranges_changed = false;
 let connected = false;
 let round_started = false;
 let round_updates_counter = 0;
-let current_time = [0, 0, 0, 0, 0];
+let current_time = 0;
 let refresh_rate = 0;
 /** @type {TemperatureRange[]} */
 let global_ranges;
@@ -49,30 +49,12 @@ function onMessage(webSocket) {
                 if (round_updates_counter == 0)
                     change_round_status('running');
                 round_updates_counter += 1;
-                for (const temp of message.ns[0]) {
+                for (const temp of message.ns) {
                     if (!isNaN(temp))
-                        add_chart_point(current_time[0], temp, 0);
-                    current_time[0] += refresh_rate;
-                }
-                for (const val of message.ns[1]) {
-                    if (!isNaN(val))
-                        chart_output.data.datasets[0].data.push({ x: current_time[1], y: val });
-                    current_time[1] += refresh_rate;
+                        add_chart_point(current_time, temp);
+                    current_time += refresh_rate;
                 }
                 chart.update();
-                chart_output.update();
-                break;
-
-            case 'Nend':
-                console.log("received Nend");
-                for (let i = 0; i < 3; i++) {
-                    for (const val of message.ns[i]) {
-                        if (!isNaN(val))
-                            chart_output.data.datasets[i + 1].data.push({ x: current_time[i + 2], y: val });
-                        current_time[i + 2] += refresh_rate;
-                    }
-                }
-                chart_output.update();
                 break;
 
             case 'TempTooHigh':
@@ -132,7 +114,7 @@ function onMessage(webSocket) {
                     startBtn.disabled = false;
                     change_round_status('ready');
                 }
-                current_time = [0, 0, 0, 0, 0];
+                current_time = 0;
                 break;
             default:
                 console.warn(`Mensaje no reconocido: ${json}`);
@@ -143,14 +125,12 @@ function onMessage(webSocket) {
 
 /**
  * @param {string} id
- * @param {boolean} allow_real
  * @returns {number?}
  **/
-function get_field_value(id, allow_real) {
+function get_field_value(id) {
     const elem = /** @type {HTMLButtonElement?} */ (document.getElementById(id));
-    const parser = allow_real ? parseFloat : parseInt;
-    const value = parser(elem?.value ?? "");
-    if (isNaN(value) || (!allow_real && value <= 0)) {
+    const value = parseInt(elem?.value ?? "");
+    if (isNaN(value) || value <= 0) {
         elem?.classList.add('error');
         return null;
     }
@@ -175,18 +155,12 @@ function sendRound(webSocket) {
 
         hide_range_errors();
 
-        const refreshInMilliseconds = get_field_value("rate", false);
+        const refreshInMilliseconds = get_field_value("rate");
         if (refreshInMilliseconds == null) return;
-        const kp = get_field_value("kp", true);
-        if (kp == null) return;
-        const ki = get_field_value("ki", true);
-        if (ki == null) return;
-        const kd = get_field_value("kd", true);
-        if (kd == null) return;
 
         const message = {
             type: "Command",
-            data: { refreshInMilliseconds, pass: PASS, ranges, isTest: false, kp, ki, kd }
+            data: { refreshInMilliseconds, pass: PASS, ranges, isTest: false }
         };
         console.log(message)
         webSocket.send(JSON.stringify(message));

@@ -26,12 +26,6 @@ namespace TemperatureWarriorCode
         double[] median_buffer = new double[oversample];
 
         double temp_raw;
-        double output;
-        double p;
-        double i;
-        double d;
-
-        // long start_ts;
 
         TemperatureController temperatureController;
 
@@ -52,11 +46,6 @@ namespace TemperatureWarriorCode
 
         /// Update buffers to send during the next client notification
         RingBuffer<double> temp_raw_buf = new();
-        RingBuffer<double> output_buf = new();
-
-        RingBuffer<double> p_buf = new();
-        RingBuffer<double> i_buf = new();
-        RingBuffer<double> d_buf = new();
 
         const long notification_period = 1000;
 
@@ -74,13 +63,6 @@ namespace TemperatureWarriorCode
         }
 
         OpMode currentMode = OpMode.Config;
-
-        // private double ts()
-        // {
-        //     long milliseconds = DateTime.Now.Ticks /
-        //     TimeSpan.TicksPerMillisecond; double ts = (double)(milliseconds -
-        //     start_ts) / 1000; start_ts = milliseconds; return ts;
-        // }
 
         /// Entry point for the application
         public override async Task Run()
@@ -120,7 +102,6 @@ namespace TemperatureWarriorCode
                 TimeSpan period = TimeSpan.FromMilliseconds(sensorSampleTime);
                 while (true)
                 {
-                    // start_ts = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
                     sw.Restart();
                     var measurement = await get_temp(sensor);
                     TemperatureUpdateHandler(measurement);
@@ -128,10 +109,9 @@ namespace TemperatureWarriorCode
                     int rest = (period - sw.Elapsed).Milliseconds;
                     if (rest > 0)
                         await Task.Delay(rest);
-                    // Resolver.Log.Info($"## [round] ## measurement dt = {ts()}s,
-                    // temp = {measurement}");
                 }
             });
+
             var cooler = Device.CreatePwmPort(
                 Device.Pins.D02,
                 new Frequency(10, Frequency.UnitType.Hertz),
@@ -142,7 +122,6 @@ namespace TemperatureWarriorCode
                 new Frequency(10, Frequency.UnitType.Hertz),
                 0.0f
             );
-
             temperatureController = new TemperatureController(
                 dt: sensorSampleTime,
                 cooler_pwm: cooler,
@@ -220,7 +199,7 @@ namespace TemperatureWarriorCode
                 TemperatureTooHighHandler();
                 return;
             }
-            output = temperatureController.update(temp_raw, out p, out i, out d);
+            temperatureController.update(temp_raw);
         }
 
         /// Handler for messages received by the web server
@@ -249,7 +228,6 @@ namespace TemperatureWarriorCode
 
                     Resolver.Log.Info("[MeadowApp] Command saved");
                     Command cmd = message.data.Value.ToCommand();
-                    temperatureController.set_constants(cmd.kp, cmd.ki, cmd.kd);
                     currentCommand = cmd;
                     currentMode = OpMode.Prep;
                     await webServer.SendMessage(connection, "{\"type\": \"ConfigOK\"}");
@@ -305,22 +283,11 @@ namespace TemperatureWarriorCode
 
         private async Task NotifyClient(WebSocketServer webServer, NetworkStream connection)
         {
-            while (!temp_raw_buf.is_empty() || !output_buf.is_empty())
+            while (!temp_raw_buf.is_empty())
             {
                 await webServer.SendMessage(
                     connection,
-                    $"{{ \"type\": \"N\", \"ns\": [{SerializeNextNotifications(temp_raw_buf)}, {SerializeNextNotifications(output_buf)}]}}"
-                );
-            }
-        }
-
-        private async Task NotifyClientEnd(WebSocketServer webServer, NetworkStream connection)
-        {
-            while (!p_buf.is_empty() || !i_buf.is_empty() || !d_buf.is_empty())
-            {
-                await webServer.SendMessage(
-                    connection,
-                    $"{{ \"type\": \"Nend\", \"ns\": [{SerializeNextNotifications(p_buf)}, {SerializeNextNotifications(i_buf)}, {SerializeNextNotifications(d_buf)}]}}"
+                    $"{{ \"type\": \"N\", \"ns\": {SerializeNextNotifications(temp_raw_buf)}}}"
                 );
             }
         }
@@ -330,14 +297,6 @@ namespace TemperatureWarriorCode
             timeController.RegisterTemperature(temp_raw);
             if (!temp_raw_buf.Enqueue(temp_raw))
                 Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de temp raw");
-            if (!output_buf.Enqueue(output))
-                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de output");
-            if (!p_buf.Enqueue(p))
-                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de output");
-            if (!i_buf.Enqueue(i))
-                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de output");
-            if (!d_buf.Enqueue(d))
-                Resolver.Log.Error("[MeadowApp] Fallo en añadir a cola de output");
         }
 
         private static double getRangeSetpoint(double min, double max)
@@ -407,14 +366,6 @@ namespace TemperatureWarriorCode
             var newSize = 2 * notifications;
 
             temp_raw_buf.ResizeAndReset(newSize);
-            output_buf.ResizeAndReset(newSize);
-
-            notifications = (int)Math.Ceiling(total_time / (double)cmd.refreshInMilliseconds);
-            newSize = 2 * notifications;
-            Resolver.Log.Info($"output size: {newSize}");
-            p_buf.ResizeAndReset(newSize);
-            i_buf.ResizeAndReset(newSize);
-            d_buf.ResizeAndReset(newSize);
 
             GC.Collect();
 
@@ -443,8 +394,8 @@ namespace TemperatureWarriorCode
                 Resolver.Log.Info($"Iniciando rango [{range.MinTemp} - {range.MaxTemp}]");
                 if (await run_setpoint(target, range.RangeTimeInMilliseconds / 2, cancel_token))
                     break;
-                var curr_min = range.MinTemp + 1;
-                var curr_max = range.MaxTemp - 1;
+                var curr_min = range.MinTemp + 1.5;
+                var curr_max = range.MaxTemp - 1.5;
                 var min = Math.Max(curr_min, ranges[i + 1].MinTemp);
                 var max = Math.Min(curr_max, ranges[i + 1].MaxTemp);
                 if (max >= min)
@@ -503,7 +454,6 @@ namespace TemperatureWarriorCode
                     connection,
                     $"{{ \"type\": \"RoundFinished\", \"timeInRange\": {timeController.TimeInRangeInMilliseconds}}}"
                 );
-                await NotifyClientEnd(webServer, connection);
             }
 
             timeController.FinishOperation();

@@ -58,22 +58,13 @@ namespace TemperatureWarriorCode
             pid.SetSetpoint(setpoint);
         }
 
-        /// Change the PID constants
-        public void set_constants(double kp, double ki, double kd)
-        {
-            pid.set_constants(kp, ki, kd);
-        }
-
         /// Function to call during the main update loop
-        public double update(double temp, out double p, out double i, out double d)
+        public void update(double temp)
         {
-            p = 0;
-            i = 0;
-            d = 0;
             if (!isWorking)
-                return 0;
+                return;
             // Update the controller to get the next control output
-            double control = pid.update(temp, dt, out p, out i, out d);
+            double control = pid.update(temp, dt);
             // If it's positive, we must heat up the system
             if (control > 0)
             {
@@ -86,7 +77,6 @@ namespace TemperatureWarriorCode
                 heater.DutyCycle = 0;
                 cooler.DutyCycle = -control;
             }
-            return control;
         }
     }
 
@@ -100,13 +90,13 @@ namespace TemperatureWarriorCode
         // ─────────────────────── Controller constants ────────────────────────
 
         /// Proportional constant
-        double kp = 0;
+        const double kp = 15;
 
         /// Integral constant
-        double ki = 0;
+        const double ki = 8000;
 
         /// Derivative constant
-        double kd = 0;
+        const double kd = 300;
 
         /// Target value
         double setpoint = 0;
@@ -131,14 +121,6 @@ namespace TemperatureWarriorCode
             derivative_filter = new LowPassFilter(0.1, Config.DERIVATIVE_FILTER_CONSTANT);
         }
 
-        /// Change the PID constants
-        public void set_constants(double kp, double ki, double kd)
-        {
-            this.kp = kp;
-            this.ki = ki;
-            this.kd = kd;
-        }
-
         /// Change the target value
         public void SetSetpoint(double setpoint)
         {
@@ -155,7 +137,7 @@ namespace TemperatureWarriorCode
         }
 
         /// Calculates the next output
-        public double update(double current, double dt, out double p, out double i, out double d)
+        public double update(double current, double dt)
         {
             current = current / 100;
             double error = setpoint - current;
@@ -165,9 +147,6 @@ namespace TemperatureWarriorCode
             double derivative = kp * kd * (error - prev_error) / dt;
             derivative = derivative_filter.filter(derivative);
             double proportional = kp * error;
-            p = proportional;
-            i = integral;
-            d = derivative;
             output = proportional + integral + derivative;
             output = Math.Max(-1, Math.Min(1, output));
             prev_error = error;
