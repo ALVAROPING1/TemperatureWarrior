@@ -1,5 +1,17 @@
 # MeadowApp - Control y Monitoreo de Temperatura
 
+## Temperature Warrior
+
+This project follows a set of temperature ranges given by tuples (min, max, time), and allows to configure and display the ranges with real time data on a web based UI.
+
+Winner of the 2024/25 year competition, achieving an average >90% time in range, and >50% worst case scenario. Can stabilize ranges within a ±0.5ºC tolerance. During round configuration, stabilizes the first range to avoid wasting time during the round. At the mid point of a round, tries to get as close as possible to the next range without leaving the current range. If the intersection between the current and next ranges isn't empty, at the mid point of the range the target is changed to the center of the intersection to avoid going outside the range during the range change.
+
+Uses a PID controller to determine the activation power of a peltier and hair dryer. Sensor is connected through a low-pass filter using a 100μF capacitor and a ~5KΩ resistance.
+
+## Branches
+
+Master branch contains the main code used during tests. Combat branch contains a stripped down version used during the competition. Master branch displays a second graph with the PID controller state during the round (output and individual components), and allows changing the PID constants from the web interface.
+
 ## Descripción
 Este proyecto implementa una aplicación en C# para dispositivos Meadow que permite el monitoreo y control de la temperatura utilizando un sensor analógico TMP36. Además, se conecta a una red WiFi y proporciona una interfaz basada en WebSockets para recibir comandos y enviar notificaciones de temperatura en tiempo real.
 
